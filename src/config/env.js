@@ -1,10 +1,15 @@
 import 'dotenv/config'
 import { z } from 'zod'
 
+const mongoConnectionString = z.string().trim().refine(
+  (value) => /^mongodb(?:\+srv)?:\/\/[^\s/]+(?:\/[^\s]*)?$/.test(value),
+  'MONGODB_URI must be a valid MongoDB connection string.',
+)
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(5000),
-  MONGODB_URI: z.string().url().optional(),
+  MONGODB_URI: mongoConnectionString.optional(),
   MONGODB_DB_NAME: z.string().min(1).default('legalease'),
   CLIENT_ORIGINS: z.string().optional(),
 })
