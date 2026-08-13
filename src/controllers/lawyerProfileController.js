@@ -1,4 +1,5 @@
 import { LawyerProfile } from '../models/LawyerProfile.js'
+import { env } from '../config/env.js'
 import { isProfileComplete } from '../services/paymentService.js'
 
 function toProfileResponse(profile) {
@@ -17,7 +18,7 @@ function toProfileResponse(profile) {
     availability: profile.availability,
     verificationStatus: profile.verificationStatus,
     publicationStatus: profile.publicationStatus,
-    publishingFeeMinor: Number(process.env.LAWYER_PUBLISHING_FEE_CENTS ?? 5000),
+    publishingFeeMinor: env.LAWYER_PUBLISHING_FEE_CENTS ?? null,
     isCompleteForPublishing: Boolean(profile.professionalPhotoUrl && profile.specialization && profile.bio && profile.consultationFeeMinor > 0 && Number.isInteger(profile.experienceYears) && profile.experienceYears >= 0 && profile.licenseNumber),
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,

@@ -5,9 +5,10 @@ import { PaymentTransaction } from '../models/PaymentTransaction.js'
 
 function error(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
 export function isProfileComplete(profile) { return Boolean(profile.professionalPhotoUrl && profile.specialization && profile.bio && profile.consultationFeeMinor > 0 && Number.isInteger(profile.experienceYears) && profile.experienceYears >= 0 && profile.licenseNumber) }
-function stripeClient() { if (!env.STRIPE_SECRET_KEY) throw error('Payments are not configured yet.', 503, 'PAYMENTS_UNAVAILABLE'); return new Stripe(env.STRIPE_SECRET_KEY) }
+function stripeClient() { if (!env.STRIPE_SECRET_KEY || !env.LAWYER_PUBLISHING_FEE_CENTS) throw error('Payments are not configured yet.', 503, 'PAYMENTS_UNAVAILABLE'); return new Stripe(env.STRIPE_SECRET_KEY) }
+const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
-export async function createVerificationCheckout(user) {
+export async function createVerificationCheckout(user, { stripe: injectedStripe } = {}) {
   const profile = await LawyerProfile.findOne({ userId: user.id })
   if (!profile) throw error('Create your professional profile before verification.', 404, 'LAWYER_PROFILE_NOT_FOUND')
   if (profile.publicationStatus === 'suspended' || profile.publicationStatus === 'deleted') throw error('This profile cannot start verification.', 403, 'PROFILE_NOT_ELIGIBLE')
@@ -18,30 +19,51 @@ export async function createVerificationCheckout(user) {
     transaction = await PaymentTransaction.findOneAndUpdate(
       { lawyerProfileId: profile.id, type: 'lawyer_verification' },
       { $setOnInsert: { payerId: user.id, lawyerId: user.id, lawyerProfileId: profile.id, type: 'lawyer_verification', amountMinor: env.LAWYER_PUBLISHING_FEE_CENTS, currency: env.STRIPE_CURRENCY, status: 'pending' } },
-      { new: true, upsert: true },
+      { returnDocument: 'after', upsert: true },
     )
   } catch (cause) {
     if (cause?.code !== 11000) throw cause
     transaction = await PaymentTransaction.findOne({ lawyerProfileId: profile.id, type: 'lawyer_verification' })
   }
   if (transaction.status === 'paid') throw error('Your profile has already been verified.', 409, 'VERIFICATION_ALREADY_PAID')
-  const stripe = stripeClient()
-  if (transaction.stripeCheckoutSessionId) {
-    const existing = await stripe.checkout.sessions.retrieve(transaction.stripeCheckoutSessionId)
-    if (existing.status === 'open' && existing.url) return { transaction, checkoutUrl: existing.url }
+  const stripe = injectedStripe ?? stripeClient()
+  for (let retry = 0; retry < 10; retry += 1) {
+    transaction = await PaymentTransaction.findById(transaction.id)
+    if (transaction.status === 'paid') throw error('Your profile has already been verified.', 409, 'VERIFICATION_ALREADY_PAID')
+    if (transaction.checkoutCreating) { await pause(100); continue }
+    if (transaction.stripeCheckoutSessionId) {
+      const existing = await stripe.checkout.sessions.retrieve(transaction.stripeCheckoutSessionId)
+      if (existing.status === 'open' && existing.url) return { transaction, checkoutUrl: existing.url }
+    }
+    const claimed = await PaymentTransaction.findOneAndUpdate(
+      { _id: transaction.id, status: 'pending', checkoutCreating: { $ne: true }, checkoutAttempt: transaction.checkoutAttempt },
+      { $set: { checkoutCreating: true }, $inc: { checkoutAttempt: 1 } },
+      { returnDocument: 'after' },
+    )
+    if (!claimed) { await pause(100); continue }
+    try {
+      const baseUrl = env.clientOrigins[0]
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment', payment_method_types: ['card'],
+        line_items: [{ price_data: { currency: env.STRIPE_CURRENCY, product_data: { name: 'LegalEase lawyer publishing verification' }, unit_amount: env.LAWYER_PUBLISHING_FEE_CENTS }, quantity: 1 }],
+        metadata: { transactionId: claimed.id, lawyerProfileId: profile.id, lawyerId: user.id, type: 'lawyer_verification' },
+        success_url: `${baseUrl}/payment/success?transactionId=${claimed.id}`,
+        cancel_url: `${baseUrl}/payment/cancel?transactionId=${claimed.id}`,
+      }, { idempotencyKey: `legalease-verification-${claimed.id}-${claimed.checkoutAttempt}` })
+      const saved = await PaymentTransaction.findOneAndUpdate(
+        { _id: claimed.id, checkoutCreating: true, checkoutAttempt: claimed.checkoutAttempt },
+        { $set: { stripeCheckoutSessionId: session.id, checkoutCreating: false } },
+        { returnDocument: 'after' },
+      )
+      if (!saved) throw error('Checkout preparation could not be completed. Please try again.', 409, 'CHECKOUT_RETRY_REQUIRED')
+      await LawyerProfile.updateOne({ _id: profile.id, verificationStatus: { $ne: 'paid' } }, { $set: { verificationStatus: 'checkout_created' } })
+      return { transaction: saved, checkoutUrl: session.url }
+    } catch (cause) {
+      await PaymentTransaction.updateOne({ _id: claimed.id, status: { $ne: 'paid' }, checkoutCreating: true }, { $set: { checkoutCreating: false } })
+      throw cause
+    }
   }
-  const baseUrl = env.CLIENT_ORIGINS.split(',')[0]
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment', payment_method_types: ['card'],
-    line_items: [{ price_data: { currency: env.STRIPE_CURRENCY, product_data: { name: 'LegalEase lawyer publishing verification' }, unit_amount: env.LAWYER_PUBLISHING_FEE_CENTS }, quantity: 1 }],
-    metadata: { transactionId: transaction.id, lawyerProfileId: profile.id, lawyerId: user.id, type: 'lawyer_verification' },
-    success_url: `${baseUrl}/payment/success?transactionId=${transaction.id}`,
-    cancel_url: `${baseUrl}/payment/cancel?transactionId=${transaction.id}`,
-  }, { idempotencyKey: `legalease-verification-${transaction.id}` })
-  transaction.stripeCheckoutSessionId = session.id
-  await transaction.save()
-  if (profile.verificationStatus !== 'paid') { profile.verificationStatus = 'checkout_created'; await profile.save() }
-  return { transaction, checkoutUrl: session.url }
+  throw error('Verification checkout is being prepared. Please try again shortly.', 409, 'CHECKOUT_IN_PROGRESS')
 }
 
 export async function fulfillVerificationSession(session) {
@@ -52,8 +74,17 @@ export async function fulfillVerificationSession(session) {
   if (!transaction || transaction.type !== 'lawyer_verification' || transaction.stripeCheckoutSessionId !== session.id || String(transaction.lawyerProfileId) !== session.metadata.lawyerProfileId || transaction.amountMinor !== session.amount_total || transaction.currency !== session.currency) throw error('Payment session cannot be reconciled.', 400, 'INVALID_PAYMENT_SESSION')
   const profile = await LawyerProfile.findById(transaction.lawyerProfileId)
   if (!profile) throw error('Payment profile is unavailable.', 404, 'LAWYER_PROFILE_NOT_FOUND')
-  if (transaction.status !== 'paid') { transaction.status = 'paid'; transaction.paidAt ??= new Date(); transaction.stripePaymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id; await transaction.save() }
-  if (profile.verificationStatus !== 'paid') { profile.verificationStatus = 'paid'; profile.verificationPaidAt ??= transaction.paidAt; await profile.save() }
+  const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+  const paidAt = transaction.paidAt ?? new Date()
+  await PaymentTransaction.updateOne(
+    { _id: transaction.id, status: { $ne: 'paid' } },
+    { $set: { status: 'paid', paidAt, stripePaymentIntentId: paymentIntentId, checkoutCreating: false } },
+  )
+  const paidTransaction = await PaymentTransaction.findById(transaction.id)
+  await LawyerProfile.updateOne(
+    { _id: profile.id, verificationStatus: { $ne: 'paid' } },
+    { $set: { verificationStatus: 'paid', verificationPaidAt: paidTransaction.paidAt } },
+  )
 }
 
 export async function resetExpiredCheckout(session) {

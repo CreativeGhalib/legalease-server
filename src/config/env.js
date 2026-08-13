@@ -31,7 +31,7 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: optionalEnvironmentValue(z.string().min(1)),
   STRIPE_WEBHOOK_SECRET: optionalEnvironmentValue(z.string().min(1)),
   STRIPE_CURRENCY: z.literal('usd').default('usd'),
-  LAWYER_PUBLISHING_FEE_CENTS: z.coerce.number().int().positive().default(5000),
+  LAWYER_PUBLISHING_FEE_CENTS: optionalEnvironmentValue(z.coerce.number().int().positive()),
   ADMIN_NAME: z.string().trim().min(2).optional(),
   ADMIN_EMAIL: z.string().trim().email().optional(),
   ADMIN_PASSWORD: z.string().min(12).optional(),
@@ -56,6 +56,10 @@ if (values.NODE_ENV === 'production' && clientOrigins.length === 0) {
 
 if (values.GOOGLE_CLIENT_ID && !values.GOOGLE_ONBOARDING_SECRET) {
   throw new Error('GOOGLE_ONBOARDING_SECRET is required when GOOGLE_CLIENT_ID is configured.')
+}
+
+if (values.STRIPE_SECRET_KEY && !values.LAWYER_PUBLISHING_FEE_CENTS) {
+  throw new Error('LAWYER_PUBLISHING_FEE_CENTS is required when STRIPE_SECRET_KEY is configured.')
 }
 
 export const env = { ...values, clientOrigins }

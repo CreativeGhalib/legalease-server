@@ -8,6 +8,8 @@ const paymentTransactionSchema = new mongoose.Schema({
   hiringRequestId: { type: mongoose.Schema.Types.ObjectId, default: null },
   stripeCheckoutSessionId: { type: String, sparse: true, unique: true },
   stripePaymentIntentId: { type: String, sparse: true, unique: true },
+  checkoutAttempt: { type: Number, default: 0, min: 0 },
+  checkoutCreating: { type: Boolean, default: false },
   amountMinor: { type: Number, required: true, min: 1 },
   currency: { type: String, required: true, enum: ['usd'] },
   status: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
