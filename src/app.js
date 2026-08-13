@@ -9,6 +9,7 @@ import authRouter from './routes/authRoutes.js'
 import lawyerRouter from './routes/lawyerRoutes.js'
 import uploadRouter from './routes/uploadRoutes.js'
 import paymentRouter, { stripeWebhookRouter } from './routes/paymentRoutes.js'
+import userRouter from './routes/userRoutes.js'
 
 const app = express()
 
@@ -34,6 +35,7 @@ app.use('/api/payments', stripeWebhookRouter)
 app.use(express.json())
 app.use('/api/health', healthRouter)
 app.use('/api/auth', authRouter)
+app.use('/api/users', userRouter)
 app.use('/api/lawyers', lawyerRouter)
 app.use('/api/uploads', uploadRouter)
 app.use('/api/payments', paymentRouter)

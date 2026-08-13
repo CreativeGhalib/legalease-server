@@ -2,7 +2,6 @@ import multer from 'multer'
 import { Router } from 'express'
 import { uploadProfileImage } from '../controllers/uploadController.js'
 import { authenticate } from '../middleware/authenticate.js'
-import { authorizeRoles } from '../middleware/authorizeRoles.js'
 import { verifyOrigin } from '../middleware/verifyOrigin.js'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024, files: 1 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) })
@@ -24,5 +23,5 @@ function handleImageUpload(request, response, next) {
   })
 }
 
-uploadRouter.post('/image', authenticate, authorizeRoles('lawyer'), verifyOrigin, handleImageUpload, uploadProfileImage)
+uploadRouter.post('/image', authenticate, verifyOrigin, handleImageUpload, uploadProfileImage)
 export default uploadRouter
