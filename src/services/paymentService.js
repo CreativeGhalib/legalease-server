@@ -129,6 +129,19 @@ export async function fulfillHiringSession(session) {
   if (marked) await LawyerProfile.updateOne({ _id: request.lawyerProfileId }, { $inc: { paidHireCount: 1 } })
 }
 
+// Webhooks are the normal fulfillment path. This server-side reconciliation is
+// deliberately narrow: it can only inspect the already-stored Stripe session
+// for an existing, owner-authorized transaction. It never trusts browser data.
+export async function reconcilePendingPayment(transaction) {
+  if (!transaction || transaction.status === 'paid' || !transaction.stripeCheckoutSessionId) return transaction
+  const stripe = stripeClient()
+  const session = await stripe.checkout.sessions.retrieve(transaction.stripeCheckoutSessionId)
+  if (session.payment_status !== 'paid') return transaction
+  if (transaction.type === 'hiring_fee') await fulfillHiringSession(session)
+  if (transaction.type === 'lawyer_verification') await fulfillVerificationSession(session)
+  return PaymentTransaction.findById(transaction.id)
+}
+
 export async function resetExpiredCheckout(session) {
   const transactionId = session.metadata?.transactionId
   if (!transactionId) return
