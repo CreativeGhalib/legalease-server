@@ -17,5 +17,6 @@ const paymentTransactionSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 paymentTransactionSchema.index({ lawyerProfileId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'lawyer_verification' } })
+paymentTransactionSchema.index({ hiringRequestId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'hiring_fee' } })
 
 export const PaymentTransaction = mongoose.model('PaymentTransaction', paymentTransactionSchema)
