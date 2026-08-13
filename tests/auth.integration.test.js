@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import test from 'node:test'
 
 const testUri = process.env.TEST_MONGODB_URI
@@ -10,8 +11,11 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
   process.env.NODE_ENV = 'test'
   process.env.MONGODB_URI = testUri
   process.env.MONGODB_DB_NAME = testDatabase
-  process.env.JWT_SECRET = 'test-only-secret-that-is-longer-than-thirty-two-characters'
+  process.env.JWT_SECRET = randomBytes(48).toString('hex')
   process.env.CLIENT_ORIGINS = 'http://localhost:5173'
+  const testPassword = randomBytes(24).toString('base64url')
+  const conflictPassword = randomBytes(24).toString('base64url')
+  const seedPassword = randomBytes(24).toString('base64url')
 
   const [{ default: request }, mongoose, jwt, bcrypt, { default: app }, { User }, { authorizeRoles }] = await Promise.all([
     import('supertest'),
@@ -43,8 +47,8 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
     .send({
       fullName: 'Integration User',
       email: ' AUTH.INTEGRATION@LegalEase.Test ',
-      password: 'Secure-test-password-123!',
-      confirmPassword: 'Secure-test-password-123!',
+      password: testPassword,
+      confirmPassword: testPassword,
       role: 'user',
     })
 
@@ -62,46 +66,46 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
   assert.equal(decodedToken.exp - decodedToken.iat, 7 * 24 * 60 * 60)
 
   const storedUser = await User.findOne({ email: 'auth.integration@legalease.test' }).select('+passwordHash')
-  assert.notEqual(storedUser.passwordHash, 'Secure-test-password-123!')
-  assert.equal(await bcrypt.compare('Secure-test-password-123!', storedUser.passwordHash), true)
+  assert.notEqual(storedUser.passwordHash, testPassword)
+  assert.equal(await bcrypt.compare(testPassword, storedUser.passwordHash), true)
 
   const lawyerRegistration = await request(app).post('/api/auth/register')
     .set('Origin', 'http://localhost:5173')
-    .send({ fullName: 'Integration Lawyer', email: 'lawyer.integration@legalease.test', password: 'Secure-test-password-123!', confirmPassword: 'Secure-test-password-123!', role: 'lawyer' })
+    .send({ fullName: 'Integration Lawyer', email: 'lawyer.integration@legalease.test', password: testPassword, confirmPassword: testPassword, role: 'lawyer' })
   assert.equal(lawyerRegistration.status, 201)
   assert.equal(lawyerRegistration.body.data.user.role, 'lawyer')
 
   const duplicate = await request(app).post('/api/auth/register')
     .set('Origin', 'http://localhost:5173')
-    .send({ fullName: 'Duplicate User', email: 'auth.integration@legalease.test', password: 'Secure-test-password-123!', confirmPassword: 'Secure-test-password-123!', role: 'user' })
+    .send({ fullName: 'Duplicate User', email: 'auth.integration@legalease.test', password: testPassword, confirmPassword: testPassword, role: 'user' })
   assert.equal(duplicate.status, 409)
   assert.equal(duplicate.body.error.code, 'EMAIL_ALREADY_REGISTERED')
 
   const adminRole = await request(app).post('/api/auth/register')
     .set('Origin', 'http://localhost:5173')
-    .send({ fullName: 'Bad Role', email: 'admin-denied@legalease.test', password: 'Secure-test-password-123!', confirmPassword: 'Secure-test-password-123!', role: 'admin' })
+    .send({ fullName: 'Bad Role', email: 'admin-denied@legalease.test', password: testPassword, confirmPassword: testPassword, role: 'admin' })
   assert.equal(adminRole.status, 400)
 
   const mismatch = await request(app).post('/api/auth/register')
     .set('Origin', 'http://localhost:5173')
-    .send({ fullName: 'Mismatch User', email: 'mismatch@legalease.test', password: 'Secure-test-password-123!', confirmPassword: 'different-password', role: 'user' })
+    .send({ fullName: 'Mismatch User', email: 'mismatch@legalease.test', password: testPassword, confirmPassword: conflictPassword, role: 'user' })
   assert.equal(mismatch.status, 400)
 
   const invalidLogin = await request(app).post('/api/auth/login')
     .set('Origin', 'http://localhost:5173')
-    .send({ email: 'auth.integration@legalease.test', password: 'wrong-password' })
+    .send({ email: 'auth.integration@legalease.test', password: conflictPassword })
   assert.equal(invalidLogin.status, 401)
   assert.equal(invalidLogin.body.error.code, 'INVALID_CREDENTIALS')
 
   const unknownLogin = await request(app).post('/api/auth/login')
     .set('Origin', 'http://localhost:5173')
-    .send({ email: 'unknown@legalease.test', password: 'Secure-test-password-123!' })
+    .send({ email: 'unknown@legalease.test', password: testPassword })
   assert.equal(unknownLogin.status, 401)
   assert.deepEqual(unknownLogin.body.error, invalidLogin.body.error)
 
   const login = await request(app).post('/api/auth/login')
     .set('Origin', 'http://localhost:5173')
-    .send({ email: 'auth.integration@legalease.test', password: 'Secure-test-password-123!' })
+    .send({ email: 'auth.integration@legalease.test', password: testPassword })
   assert.equal(login.status, 200)
   assert.equal(login.body.data.token, undefined)
 
@@ -148,7 +152,7 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
   await user.save()
   const disabledLogin = await request(app).post('/api/auth/login')
     .set('Origin', 'http://localhost:5173')
-    .send({ email: 'auth.integration@legalease.test', password: 'Secure-test-password-123!' })
+    .send({ email: 'auth.integration@legalease.test', password: testPassword })
   assert.equal(disabledLogin.status, 401)
   assert.equal(disabledLogin.body.error.code, 'INVALID_CREDENTIALS')
 
@@ -158,7 +162,7 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
     MONGODB_DB_NAME: testDatabase,
     ADMIN_NAME: 'Seed Integration Admin',
     ADMIN_EMAIL: 'seed-admin.integration@legalease.test',
-    ADMIN_PASSWORD: 'Seed-integration-password-123!',
+    ADMIN_PASSWORD: seedPassword,
   }
   const runSeed = (environment = seedEnvironment) => spawnSync(process.execPath, ['scripts/seedAdmin.js'], {
     cwd: process.cwd(),
@@ -176,7 +180,7 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
   await User.create({
     fullName: 'Seed Conflict User',
     email: 'seed-conflict.integration@legalease.test',
-    passwordHash: await bcrypt.hash('Conflict-password-123!', 12),
+    passwordHash: await bcrypt.hash(conflictPassword, 12),
     role: 'user',
     providers: ['local'],
   })
