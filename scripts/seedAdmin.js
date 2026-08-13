@@ -9,11 +9,24 @@ if (!env.ADMIN_NAME || !env.ADMIN_EMAIL || !env.ADMIN_PASSWORD) {
 }
 
 await connectDatabase()
+const email = env.ADMIN_EMAIL.toLowerCase()
+const existingUser = await User.findOne({ email }).select('+passwordHash')
+
+if (existingUser) {
+  if (existingUser.role !== 'admin') {
+    throw new Error('ADMIN_EMAIL belongs to an existing non-admin account. Refusing to overwrite it.')
+  }
+  console.info(`Admin account already exists: ${existingUser.email}`)
+  process.exit(0)
+}
+
 const passwordHash = await bcrypt.hash(env.ADMIN_PASSWORD, 12)
-const user = await User.findOneAndUpdate(
-  { email: env.ADMIN_EMAIL.toLowerCase() },
-  { $set: { fullName: env.ADMIN_NAME, passwordHash, role: 'admin', status: 'active' }, $addToSet: { providers: 'local' } },
-  { new: true, upsert: true, setDefaultsOnInsert: true },
-)
-console.info(`Admin account ready: ${user.email}`)
+const user = await User.create({
+  fullName: env.ADMIN_NAME,
+  email,
+  passwordHash,
+  role: 'admin',
+  providers: ['local'],
+})
+console.info(`Admin account created: ${user.email}`)
 process.exit(0)
