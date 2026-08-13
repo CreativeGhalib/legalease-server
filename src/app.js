@@ -12,6 +12,7 @@ import paymentRouter, { stripeWebhookRouter } from './routes/paymentRoutes.js'
 import userRouter from './routes/userRoutes.js'
 import hiringRouter from './routes/hiringRequestRoutes.js'
 import commentRouter, { lawyerCommentRouter } from './routes/commentRoutes.js'
+import adminRouter from './routes/adminRoutes.js'
 
 const app = express()
 
@@ -40,6 +41,7 @@ app.use('/api/auth', authRouter)
 app.use('/api/users', userRouter)
 app.use('/api/hiring-requests', hiringRouter)
 app.use('/api/comments', commentRouter)
+app.use('/api/admin', adminRouter)
 app.use('/api/lawyers', lawyerCommentRouter)
 app.use('/api/lawyers', lawyerRouter)
 app.use('/api/uploads', uploadRouter)

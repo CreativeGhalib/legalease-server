@@ -16,8 +16,28 @@ if (existingUser) {
   if (existingUser.role !== 'admin') {
     throw new Error('ADMIN_EMAIL belongs to an existing non-admin account. Refusing to overwrite it.')
   }
-  console.info(`Admin account already exists: ${existingUser.email}`)
+  existingUser.fullName = env.ADMIN_NAME
+  existingUser.passwordHash = await bcrypt.hash(env.ADMIN_PASSWORD, 12)
+  existingUser.status = 'active'
+  existingUser.tokenVersion += 1
+  await existingUser.save()
+  console.info(`Admin account credentials refreshed: ${existingUser.email}`)
   process.exit(0)
+}
+
+const activeAdmins = await User.find({ role: 'admin', status: 'active' }).select('+passwordHash')
+if (activeAdmins.length === 1) {
+  const admin = activeAdmins[0]
+  admin.fullName = env.ADMIN_NAME
+  admin.email = email
+  admin.passwordHash = await bcrypt.hash(env.ADMIN_PASSWORD, 12)
+  admin.tokenVersion += 1
+  await admin.save()
+  console.info(`Existing admin credentials moved to configured email: ${admin.email}`)
+  process.exit(0)
+}
+if (activeAdmins.length > 1) {
+  throw new Error('Multiple active admins exist. Refusing to guess which account should receive the configured credentials.')
 }
 
 const passwordHash = await bcrypt.hash(env.ADMIN_PASSWORD, 12)
