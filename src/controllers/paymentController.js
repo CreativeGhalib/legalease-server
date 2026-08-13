@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import { env } from '../config/env.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
+import { HiringRequest } from '../models/HiringRequest.js'
 import { createHiringCheckout, createVerificationCheckout, fulfillHiringSession, fulfillVerificationSession, isProfileComplete, reconcilePendingPayment, resetExpiredCheckout } from '../services/paymentService.js'
 
 function fail(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
