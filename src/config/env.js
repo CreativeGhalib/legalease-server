@@ -54,12 +54,20 @@ if (values.NODE_ENV === 'production' && clientOrigins.length === 0) {
   throw new Error('CLIENT_ORIGINS is required in production.')
 }
 
+if (values.NODE_ENV === 'production' && !values.MONGODB_URI) {
+  throw new Error('MONGODB_URI is required in production.')
+}
+
 if (values.GOOGLE_CLIENT_ID && !values.GOOGLE_ONBOARDING_SECRET) {
   throw new Error('GOOGLE_ONBOARDING_SECRET is required when GOOGLE_CLIENT_ID is configured.')
 }
 
 if (values.STRIPE_SECRET_KEY && !values.LAWYER_PUBLISHING_FEE_CENTS) {
   throw new Error('LAWYER_PUBLISHING_FEE_CENTS is required when STRIPE_SECRET_KEY is configured.')
+}
+
+if (values.STRIPE_SECRET_KEY && !values.STRIPE_WEBHOOK_SECRET) {
+  throw new Error('STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is configured.')
 }
 
 export const env = { ...values, clientOrigins }
