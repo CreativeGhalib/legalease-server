@@ -1,5 +1,7 @@
 # LegalEase API
 
+> **Copyright © 2026 Mesbah Ghalib. All rights reserved.** This repository is provided for academic evaluation and portfolio review only. No permission is granted to copy, reuse, modify, distribute, publish, sublicense, or submit this work or its documentation as another person's work.
+
 Express API for the LegalEase legal-professional discovery, hiring, payment, comment, and administration workflows.
 
 ## Stack
