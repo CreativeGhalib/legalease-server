@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { uploadProfileImage } from '../controllers/uploadController.js'
 import { authenticate } from '../middleware/authenticate.js'
 import { verifyOrigin } from '../middleware/verifyOrigin.js'
+import { uploadRateLimit } from '../middleware/rateLimits.js'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024, files: 1 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) })
 const uploadRouter = Router()
@@ -23,5 +24,5 @@ function handleImageUpload(request, response, next) {
   })
 }
 
-uploadRouter.post('/image', authenticate, verifyOrigin, handleImageUpload, uploadProfileImage)
+uploadRouter.post('/image', uploadRateLimit, authenticate, verifyOrigin, handleImageUpload, uploadProfileImage)
 export default uploadRouter

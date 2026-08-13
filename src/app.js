@@ -23,7 +23,7 @@ app.use(helmet({
       scriptSrc: ["'self'", 'https://accounts.google.com'],
       frameSrc: ["'self'", 'https://accounts.google.com'],
       connectSrc: ["'self'", 'https://accounts.google.com'],
-      imgSrc: ["'self'", 'data:', 'https://lh3.googleusercontent.com'],
+      imgSrc: ["'self'", 'data:', 'https://lh3.googleusercontent.com', 'https://i.ibb.co'],
     },
   } : undefined,
 }))
@@ -35,7 +35,7 @@ app.use(cors({
   },
 }))
 app.use('/api/payments', stripeWebhookRouter)
-app.use(express.json())
+app.use(express.json({ limit: '100kb' }))
 app.use('/api/health', healthRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/users', userRouter)
