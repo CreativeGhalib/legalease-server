@@ -8,6 +8,8 @@ import { lawyerProfileSchema } from '../validators/lawyerProfileValidators.js'
 import { validateQuery } from '../middleware/validateQuery.js'
 import { publicLawyerQuerySchema } from '../validators/publicLawyerValidators.js'
 import { getPublicLawyer, listFeaturedLawyers, listPublicLawyers, listTopLawyers } from '../controllers/publicLawyerController.js'
+import { updatePublication } from '../controllers/paymentController.js'
+import { z } from 'zod'
 
 const lawyerRouter = Router()
 
@@ -21,5 +23,6 @@ lawyerRouter.get('/me/profile', getMyLawyerProfile)
 lawyerRouter.post('/me/profile', verifyOrigin, validate(lawyerProfileSchema), createMyLawyerProfile)
 lawyerRouter.patch('/me/profile', verifyOrigin, validate(lawyerProfileSchema), updateMyLawyerProfile)
 lawyerRouter.delete('/me/profile', verifyOrigin, deleteMyLawyerProfile)
+lawyerRouter.patch('/me/publication', verifyOrigin, validate(z.object({ publicationStatus: z.enum(['published', 'unpublished']) }).strict()), updatePublication)
 
 export default lawyerRouter

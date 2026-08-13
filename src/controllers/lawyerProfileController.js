@@ -1,4 +1,5 @@
 import { LawyerProfile } from '../models/LawyerProfile.js'
+import { isProfileComplete } from '../services/paymentService.js'
 
 function toProfileResponse(profile) {
   return {
@@ -16,6 +17,7 @@ function toProfileResponse(profile) {
     availability: profile.availability,
     verificationStatus: profile.verificationStatus,
     publicationStatus: profile.publicationStatus,
+    publishingFeeMinor: Number(process.env.LAWYER_PUBLISHING_FEE_CENTS ?? 5000),
     isCompleteForPublishing: Boolean(profile.professionalPhotoUrl && profile.specialization && profile.bio && profile.consultationFeeMinor > 0 && Number.isInteger(profile.experienceYears) && profile.experienceYears >= 0 && profile.licenseNumber),
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,
@@ -68,7 +70,12 @@ export async function updateMyLawyerProfile(request, response, next) {
   try {
     const profile = await LawyerProfile.findOne({ userId: request.auth.user.id })
     if (!profile || profile.publicationStatus === 'deleted') throw missingProfileError()
+    const before = profile.toObject()
     Object.assign(profile, request.body)
+    if (profile.publicationStatus === 'published' && !isProfileComplete(profile)) {
+      Object.assign(profile, before)
+      throw Object.assign(new Error('Unpublish your profile before removing required publishing information.'), { statusCode: 400, code: 'PUBLISHED_PROFILE_MUST_REMAIN_COMPLETE' })
+    }
     await profile.save()
     return response.json({ success: true, data: { profile: toProfileResponse(profile) } })
   } catch (error) { return next(error) }

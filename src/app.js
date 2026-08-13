@@ -8,6 +8,7 @@ import healthRouter from './routes/healthRoutes.js'
 import authRouter from './routes/authRoutes.js'
 import lawyerRouter from './routes/lawyerRoutes.js'
 import uploadRouter from './routes/uploadRoutes.js'
+import paymentRouter, { stripeWebhookRouter } from './routes/paymentRoutes.js'
 
 const app = express()
 
@@ -29,11 +30,13 @@ app.use(cors({
     return callback(Object.assign(new Error('Origin is not allowed by CORS.'), { statusCode: 403, code: 'CORS_ORIGIN_DENIED' }))
   },
 }))
+app.use('/api/payments', stripeWebhookRouter)
 app.use(express.json())
 app.use('/api/health', healthRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/lawyers', lawyerRouter)
 app.use('/api/uploads', uploadRouter)
+app.use('/api/payments', paymentRouter)
 app.use(notFound)
 app.use(errorHandler)
 
