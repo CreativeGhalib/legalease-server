@@ -27,6 +27,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: optionalGoogleClientId,
   GOOGLE_ONBOARDING_SECRET: optionalSecret,
   GOOGLE_ONBOARDING_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default('legalease_google_onboarding'),
+  IMGBB_API_KEY: optionalEnvironmentValue(z.string().min(1)),
   ADMIN_NAME: z.string().trim().min(2).optional(),
   ADMIN_EMAIL: z.string().trim().email().optional(),
   ADMIN_PASSWORD: z.string().min(12).optional(),

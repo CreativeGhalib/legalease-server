@@ -6,6 +6,8 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { notFound } from './middleware/notFound.js'
 import healthRouter from './routes/healthRoutes.js'
 import authRouter from './routes/authRoutes.js'
+import lawyerRouter from './routes/lawyerRoutes.js'
+import uploadRouter from './routes/uploadRoutes.js'
 
 const app = express()
 
@@ -30,6 +32,8 @@ app.use(cors({
 app.use(express.json())
 app.use('/api/health', healthRouter)
 app.use('/api/auth', authRouter)
+app.use('/api/lawyers', lawyerRouter)
+app.use('/api/uploads', uploadRouter)
 app.use(notFound)
 app.use(errorHandler)
 
