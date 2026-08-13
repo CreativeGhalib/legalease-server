@@ -17,7 +17,7 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
   const conflictPassword = randomBytes(24).toString('base64url')
   const seedPassword = randomBytes(24).toString('base64url')
 
-  const [{ default: request }, mongoose, jwt, bcrypt, { default: app }, { User }, { authorizeRoles }] = await Promise.all([
+  const [{ default: request }, mongoose, jwt, bcrypt, { default: app }, { User }, { authorizeRoles }, { resolveGoogleIdentity }] = await Promise.all([
     import('supertest'),
     import('mongoose'),
     import('jsonwebtoken'),
@@ -25,6 +25,7 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
     import('../src/app.js'),
     import('../src/models/User.js'),
     import('../src/middleware/authorizeRoles.js'),
+    import('../src/services/googleAuthService.js'),
   ])
 
   await mongoose.connect(testUri, { dbName: testDatabase })
@@ -34,6 +35,10 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
     'lawyer.integration@legalease.test',
     'seed-admin.integration@legalease.test',
     'seed-conflict.integration@legalease.test',
+    'google-user.integration@legalease.test',
+    'google-link.integration@legalease.test',
+    'google-conflict.integration@legalease.test',
+    'google-role-required.integration@legalease.test',
   ]
   await User.deleteMany({ email: { $in: testEmails } })
   context.after(async () => {
@@ -188,4 +193,60 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
   assert.notEqual(conflictSeed.status, 0)
   const conflictingUser = await User.findOne({ email: 'seed-conflict.integration@legalease.test' })
   assert.equal(conflictingUser.role, 'user')
+
+  const googleNewUser = await resolveGoogleIdentity({
+    sub: 'google-new-user-integration',
+    email: 'google-user.integration@legalease.test',
+    fullName: 'Google Integration User',
+    profileImageUrl: '',
+  }, 'lawyer')
+  assert.equal(googleNewUser.user.role, 'lawyer')
+  assert.deepEqual(googleNewUser.user.providers, ['google'])
+
+  const pendingGoogleUser = await resolveGoogleIdentity({
+    sub: 'google-role-required-integration',
+    email: 'google-role-required.integration@legalease.test',
+    fullName: 'Google Role Required',
+    profileImageUrl: '',
+  })
+  assert.equal(pendingGoogleUser.onboardingRequired, true)
+  assert.equal(await User.exists({ email: 'google-role-required.integration@legalease.test' }), null)
+
+  const localGoogleLink = await User.create({
+    fullName: 'Local Google Link',
+    email: 'google-link.integration@legalease.test',
+    passwordHash: await bcrypt.hash(testPassword, 12),
+    role: 'admin',
+    providers: ['local'],
+  })
+  const linkedGoogleUser = await resolveGoogleIdentity({
+    sub: 'google-link-integration',
+    email: 'google-link.integration@legalease.test',
+    fullName: 'Changed Google Name',
+    profileImageUrl: '',
+  })
+  assert.equal(linkedGoogleUser.user.id, localGoogleLink.id)
+  assert.equal(linkedGoogleUser.user.role, 'admin')
+  assert.equal(linkedGoogleUser.user.googleSub, 'google-link-integration')
+  assert.equal((await resolveGoogleIdentity({ sub: 'google-link-integration', email: 'google-link.integration@legalease.test', fullName: 'Google Link', profileImageUrl: '' })).user.id, localGoogleLink.id)
+
+  await User.create({
+    fullName: 'Google Conflict User',
+    email: 'google-conflict.integration@legalease.test',
+    role: 'user',
+    providers: ['google'],
+    googleSub: 'google-conflict-existing',
+  })
+  await assert.rejects(
+    () => resolveGoogleIdentity({ sub: 'google-conflict-other', email: 'google-conflict.integration@legalease.test', fullName: 'Google Conflict', profileImageUrl: '' }),
+    { code: 'GOOGLE_IDENTITY_CONFLICT' },
+  )
+
+  const deactivatedGoogleUser = await User.findOne({ email: 'google-conflict.integration@legalease.test' })
+  deactivatedGoogleUser.status = 'deactivated'
+  await deactivatedGoogleUser.save()
+  await assert.rejects(
+    () => resolveGoogleIdentity({ sub: 'google-conflict-existing', email: 'google-conflict.integration@legalease.test', fullName: 'Google Conflict', profileImageUrl: '' }),
+    { code: 'ACCOUNT_UNAVAILABLE' },
+  )
 })

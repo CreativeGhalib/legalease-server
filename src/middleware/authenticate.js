@@ -1,11 +1,6 @@
 import { User } from '../models/User.js'
-import { verifySessionToken } from '../utils/auth.js'
+import { readCookie, verifySessionToken } from '../utils/auth.js'
 import { env } from '../config/env.js'
-
-function readCookie(request, name) {
-  const match = (request.headers.cookie?.split(';') ?? []).map((item) => item.trim()).find((item) => item.startsWith(`${name}=`))
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : null
-}
 
 function sessionError() {
   const error = new Error('Authentication is required.')

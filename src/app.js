@@ -9,7 +9,17 @@ import authRouter from './routes/authRoutes.js'
 
 const app = express()
 
-app.use(helmet())
+app.use(helmet({
+  contentSecurityPolicy: env.GOOGLE_CLIENT_ID ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", 'https://accounts.google.com'],
+      frameSrc: ["'self'", 'https://accounts.google.com'],
+      connectSrc: ["'self'", 'https://accounts.google.com'],
+      imgSrc: ["'self'", 'data:', 'https://lh3.googleusercontent.com'],
+    },
+  } : undefined,
+}))
 app.use(cors({
   credentials: true,
   origin(origin, callback) {
