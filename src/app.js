@@ -17,6 +17,11 @@ import adminRouter from './routes/adminRoutes.js'
 
 const app = express()
 
+// Vercel terminates the public request before forwarding it to this Express app.
+// Trust exactly that proxy hop so targeted rate limits identify the browser rather
+// than the shared Vercel address. Local development continues to use Express defaults.
+if (process.env.VERCEL) app.set('trust proxy', 1)
+
 app.use(helmet({
   contentSecurityPolicy: env.GOOGLE_CLIENT_ID ? {
     directives: {
