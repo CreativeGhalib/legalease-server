@@ -5,12 +5,12 @@ import { User } from '../models/User.js'
 
 function fail(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
 function safeRequest(request, viewer) {
-  const base = { id: request.id, lawyerProfileId: String(request.lawyerProfileId?._id ?? request.lawyerProfileId), specializationSnapshot: request.specializationSnapshot, feeMinorSnapshot: request.feeMinorSnapshot, currency: request.currency, status: request.status, paymentStatus: request.paymentStatus, createdAt: request.createdAt, decisionAt: request.decisionAt }
+  const base = { id: request.id, lawyerProfileId: String(request.lawyerProfileId?._id ?? request.lawyerProfileId), specializationSnapshot: request.specializationSnapshot, feeMinorSnapshot: request.feeMinorSnapshot, currency: request.currency, status: request.status, paymentStatus: request.paymentStatus, createdAt: request.createdAt, decisionAt: request.decisionAt, paidAt: request.paidAt }
   if (viewer === 'client') return { ...base, lawyer: { id: String(request.lawyerId?._id ?? request.lawyerId), fullName: request.lawyerId?.fullName ?? '', professionalPhotoUrl: request.lawyerProfileId?.professionalPhotoUrl ?? '' } }
-  return { ...base, client: { id: String(request.clientId?._id ?? request.clientId), fullName: request.clientId?.fullName ?? '', profileImageUrl: request.clientId?.profileImageUrl ?? '' } }
+  return { ...base, client: { id: String(request.clientId?._id ?? request.clientId), fullName: request.clientId?.fullName ?? '', email: request.clientId?.email ?? '', profileImageUrl: request.clientId?.profileImageUrl ?? '' } }
 }
 const clientPopulate = [{ path: 'lawyerId', select: 'fullName' }, { path: 'lawyerProfileId', select: 'professionalPhotoUrl' }]
-const lawyerPopulate = [{ path: 'clientId', select: 'fullName profileImageUrl' }]
+const lawyerPopulate = [{ path: 'clientId', select: 'fullName email profileImageUrl' }]
 
 export async function createHiringRequest(client, lawyerProfileId) {
   if (!mongoose.isObjectIdOrHexString(lawyerProfileId)) throw fail('This lawyer is not available for hire.', 404, 'LAWYER_NOT_HIREABLE')
