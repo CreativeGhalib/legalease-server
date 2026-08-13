@@ -2,6 +2,7 @@ import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
 import { env } from './config/env.js'
+import { ensureDatabaseConnection } from './config/database.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { notFound } from './middleware/notFound.js'
 import healthRouter from './routes/healthRoutes.js'
@@ -34,6 +35,16 @@ app.use(cors({
     return callback(Object.assign(new Error('Origin is not allowed by CORS.'), { statusCode: 403, code: 'CORS_ORIGIN_DENIED' }))
   },
 }))
+if (process.env.VERCEL) {
+  app.use(async (request, response, next) => {
+    try {
+      await ensureDatabaseConnection()
+      next()
+    } catch (error) {
+      next(error)
+    }
+  })
+}
 app.use('/api/payments', stripeWebhookRouter)
 app.use(express.json({ limit: '100kb' }))
 app.use('/api/health', healthRouter)
