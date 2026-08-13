@@ -44,7 +44,7 @@ test('public lawyer discovery integration', { skip: !canRun && 'Set TEST_MONGODB
     profileData(hiddenUsers[3].id, 13),
   ])
 
-  const firstPage = await request(app).get('/api/lawyers')
+  const firstPage = await request(app).get('/api/lawyers?search=Public%20Family%20Lawyer')
   assert.equal(firstPage.status, 200)
   assert.equal(firstPage.body.data.items.length, 8)
   assert.deepEqual(firstPage.body.meta, { page: 1, pageSize: 8, totalItems: 10, totalPages: 2 })

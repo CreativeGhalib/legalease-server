@@ -10,6 +10,7 @@ import lawyerRouter from './routes/lawyerRoutes.js'
 import uploadRouter from './routes/uploadRoutes.js'
 import paymentRouter, { stripeWebhookRouter } from './routes/paymentRoutes.js'
 import userRouter from './routes/userRoutes.js'
+import hiringRouter from './routes/hiringRequestRoutes.js'
 
 const app = express()
 
@@ -36,6 +37,7 @@ app.use(express.json())
 app.use('/api/health', healthRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/users', userRouter)
+app.use('/api/hiring-requests', hiringRouter)
 app.use('/api/lawyers', lawyerRouter)
 app.use('/api/uploads', uploadRouter)
 app.use('/api/payments', paymentRouter)
