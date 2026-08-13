@@ -12,6 +12,11 @@ const envSchema = z.object({
   MONGODB_URI: mongoConnectionString.optional(),
   MONGODB_DB_NAME: z.string().min(1).default('legalease'),
   CLIENT_ORIGINS: z.string().optional(),
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must contain at least 32 characters.'),
+  COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default('legalease_session'),
+  ADMIN_NAME: z.string().trim().min(2).optional(),
+  ADMIN_EMAIL: z.string().trim().email().optional(),
+  ADMIN_PASSWORD: z.string().min(12).optional(),
 })
 
 const result = envSchema.safeParse(process.env)
