@@ -75,6 +75,9 @@ test('lawyer verification payment state integration', { skip: !canRun && 'Set TE
     metadata: { transactionId: transaction.id, lawyerProfileId: profile.id, lawyerId: lawyer.id, type: 'lawyer_verification' },
   }
   await assert.rejects(paymentService.fulfillVerificationSession({ ...paidSession, amount_total: 1 }), (error) => error.code === 'INVALID_PAYMENT_SESSION')
+  await assert.rejects(paymentService.fulfillVerificationSession({ ...paidSession, currency: 'eur' }), (error) => error.code === 'INVALID_PAYMENT_SESSION')
+  await assert.rejects(paymentService.fulfillVerificationSession({ ...paidSession, id: 'cs_unrelated' }), (error) => error.code === 'INVALID_PAYMENT_SESSION')
+  await assert.rejects(paymentService.fulfillVerificationSession({ ...paidSession, metadata: { ...paidSession.metadata, lawyerProfileId: '507f1f77bcf86cd799439011' } }), (error) => error.code === 'INVALID_PAYMENT_SESSION')
   assert.equal((await PaymentTransaction.findById(transaction.id)).status, 'pending')
   await Promise.all([paymentService.fulfillVerificationSession(paidSession), paymentService.fulfillVerificationSession(paidSession)])
   const paidTransaction = await PaymentTransaction.findById(transaction.id)
@@ -111,9 +114,19 @@ test('lawyer verification payment state integration', { skip: !canRun && 'Set TE
   assert.equal((await request(app).patch('/api/lawyers/me/publication').set('Cookie', cookie).set('Origin', origin).send({ publicationStatus: 'published' })).status, 403)
 
   const retryProfile = await LawyerProfile.create({ userId: otherLawyer.id, professionalPhotoUrl: 'https://i.ibb.co/payment/retry.png', specialization: 'Corporate Law', bio: 'Corporate legal service description.', consultationFeeMinor: 5000, experienceYears: 2, licenseNumber: 'PAYMENT-002', verificationStatus: 'checkout_created', publicationStatus: 'draft' })
-  const retryTransaction = await PaymentTransaction.create({ type: 'lawyer_verification', payerId: otherLawyer.id, lawyerId: otherLawyer.id, lawyerProfileId: retryProfile.id, amountMinor: 5000, currency: 'usd', status: 'pending', stripeCheckoutSessionId: 'cs_test_expired' })
+  const retryTransaction = await PaymentTransaction.create({ type: 'lawyer_verification', payerId: otherLawyer.id, lawyerId: otherLawyer.id, lawyerProfileId: retryProfile.id, amountMinor: 4200, currency: 'usd', status: 'pending', stripeCheckoutSessionId: 'cs_test_expired' })
   await paymentService.resetExpiredCheckout({ id: 'cs_test_expired', metadata: { transactionId: retryTransaction.id } })
   assert.equal((await LawyerProfile.findById(retryProfile.id)).verificationStatus, 'unpaid')
+  let retryCheckoutAmount
+  const retryCheckout = await paymentService.createVerificationCheckout(otherLawyer, { stripe: { checkout: { sessions: {
+    retrieve: async () => ({ status: 'expired', url: null }),
+    create: async (payload) => {
+      retryCheckoutAmount = payload.line_items[0].price_data.unit_amount
+      return { id: 'cs_test_retry_price', url: 'https://checkout.stripe.test/cs_test_retry_price' }
+    },
+  } } } })
+  assert.equal(retryCheckoutAmount, 4200)
+  assert.equal(retryCheckout.transaction.amountMinor, 4200)
 
   const failureProfile = await LawyerProfile.create({ userId: failureLawyer.id, professionalPhotoUrl: 'https://i.ibb.co/payment/failure.png', specialization: 'Employment Law', bio: 'Employment legal service description.', consultationFeeMinor: 5000, experienceYears: 2, licenseNumber: 'PAYMENT-003', verificationStatus: 'unpaid', publicationStatus: 'draft' })
   await assert.rejects(

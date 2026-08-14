@@ -48,7 +48,7 @@ export async function createVerificationCheckout(user, { stripe: injectedStripe 
       const baseUrl = env.clientOrigins[0]
       const session = await stripe.checkout.sessions.create({
         mode: 'payment', payment_method_types: ['card'],
-        line_items: [{ price_data: { currency: env.STRIPE_CURRENCY, product_data: { name: 'LegalEase lawyer publishing verification' }, unit_amount: env.LAWYER_PUBLISHING_FEE_CENTS }, quantity: 1 }],
+        line_items: [{ price_data: { currency: claimed.currency, product_data: { name: 'LegalEase lawyer publishing verification' }, unit_amount: claimed.amountMinor }, quantity: 1 }],
         metadata: { transactionId: claimed.id, lawyerProfileId: profile.id, lawyerId: user.id, type: 'lawyer_verification' },
         success_url: `${baseUrl}/payment/success?transactionId=${claimed.id}`,
         cancel_url: `${baseUrl}/payment/cancel?transactionId=${claimed.id}`,
@@ -125,8 +125,9 @@ export async function fulfillHiringSession(session) {
   if (!request || request.status !== 'accepted' || String(request.clientId) !== String(transaction.payerId) || String(request.lawyerId) !== String(transaction.lawyerId) || String(request.lawyerProfileId) !== String(transaction.lawyerProfileId) || String(request.id) !== session.metadata.hiringRequestId || String(request.lawyerId) !== session.metadata.lawyerId || String(request.lawyerProfileId) !== session.metadata.lawyerProfileId || request.feeMinorSnapshot !== transaction.amountMinor || request.currency.toLowerCase() !== transaction.currency) throw error('Payment session cannot be reconciled.', 400, 'INVALID_PAYMENT_SESSION')
   const paidAt = transaction.paidAt ?? new Date(); const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
   await PaymentTransaction.updateOne({ _id: transaction.id, status: { $ne: 'paid' } }, { $set: { status: 'paid', paidAt, stripePaymentIntentId: intent, checkoutCreating: false } })
-  const marked = await HiringRequest.findOneAndUpdate({ _id: request.id, status: 'accepted', paymentStatus: { $ne: 'paid' } }, { $set: { paymentStatus: 'paid', paidAt } }, { returnDocument: 'after' })
-  if (marked) await LawyerProfile.updateOne({ _id: request.lawyerProfileId }, { $inc: { paidHireCount: 1 } })
+  await HiringRequest.findOneAndUpdate({ _id: request.id, status: 'accepted', paymentStatus: { $ne: 'paid' } }, { $set: { paymentStatus: 'paid', paidAt } }, { returnDocument: 'after' })
+  const paidHireCount = await HiringRequest.countDocuments({ lawyerProfileId: request.lawyerProfileId, status: 'accepted', paymentStatus: 'paid' })
+  await LawyerProfile.updateOne({ _id: request.lawyerProfileId }, { $max: { paidHireCount } })
 }
 
 // Webhooks are the normal fulfillment path. This server-side reconciliation is
