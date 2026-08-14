@@ -4,6 +4,10 @@
 
 Express API for the LegalEase legal-professional discovery, hiring, payment, comment, and administration workflows.
 
+Production API: https://legalease-api.vercel.app
+
+Live client: https://legalease-sand.vercel.app
+
 ## Stack
 
 Node.js, Express, MongoDB Atlas/Mongoose, Zod, JWT HTTP-only cookies, Google Identity Services verification, Stripe Checkout/webhooks, and backend-mediated imgBB uploads.
