@@ -16,5 +16,6 @@ const hiringRequestSchema = new mongoose.Schema({
 hiringRequestSchema.index({ clientId: 1, lawyerProfileId: 1 }, { unique: true })
 hiringRequestSchema.index({ clientId: 1, createdAt: -1, _id: -1 })
 hiringRequestSchema.index({ lawyerId: 1, createdAt: -1, _id: -1 })
+hiringRequestSchema.index({ lawyerProfileId: 1, status: 1, paymentStatus: 1 })
 
 export const HiringRequest = mongoose.model('HiringRequest', hiringRequestSchema)
