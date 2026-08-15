@@ -26,6 +26,10 @@ export const publicLawyerQuerySchema = z.object({
     (value) => value === undefined ? undefined : value,
     z.string().regex(/^[1-9]\d*$/, 'Page must be a positive integer.').transform(Number).default(1),
   ),
+  limit: z.preprocess(
+    (value) => value === undefined ? undefined : value,
+    z.string().regex(/^[1-9]\d*$/, 'Limit must be a positive integer.').transform(Number).pipe(z.number().int().min(1).max(50)).default(12),
+  ).optional(),
 }).strict().superRefine((value, context) => {
   if (value.minFee !== undefined && value.maxFee !== undefined && value.minFee > value.maxFee) {
     context.addIssue({ code: 'custom', path: ['maxFee'], message: 'Maximum fee must be greater than or equal to minimum fee.' })

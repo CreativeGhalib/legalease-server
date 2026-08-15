@@ -87,15 +87,16 @@ export async function listPublicLawyers(request, response, next) {
   try {
     const query = request.validatedQuery
     const { pipeline, sort } = publicLawyerPipeline(query)
+    const pageSize = query.limit ?? PUBLIC_PAGE_SIZE
     const [result] = await LawyerProfile.aggregate([
       ...pipeline,
       { $facet: {
-        items: [{ $sort: sort }, { $skip: (query.page - 1) * PUBLIC_PAGE_SIZE }, { $limit: PUBLIC_PAGE_SIZE }, { $project: publicLawyerProjection }],
+        items: [{ $sort: sort }, { $skip: (query.page - 1) * pageSize }, { $limit: pageSize }, { $project: publicLawyerProjection }],
         total: [{ $count: 'totalItems' }],
       } },
     ])
     const totalItems = result.total[0]?.totalItems ?? 0
-    return response.json({ success: true, data: { items: result.items }, meta: { page: query.page, pageSize: PUBLIC_PAGE_SIZE, totalItems, totalPages: Math.ceil(totalItems / PUBLIC_PAGE_SIZE) } })
+    return response.json({ success: true, data: { items: result.items }, meta: { page: query.page, pageSize, totalItems, totalPages: Math.ceil(totalItems / pageSize) } })
   } catch (error) { return next(error) }
 }
 
