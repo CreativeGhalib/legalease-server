@@ -19,6 +19,11 @@ export async function authenticate(request, _response, next) {
     request.auth = { user }
     return next()
   } catch (error) {
+    // Log JWT-level errors in development so token issues are visible during debugging.
+    // In production these are always replaced with a generic 401 — no internal detail leaks.
+    if (!error.statusCode && process.env.NODE_ENV !== 'production') {
+      console.debug('[authenticate] session validation failed:', error.message)
+    }
     return next(error.statusCode ? error : sessionError())
   }
 }
