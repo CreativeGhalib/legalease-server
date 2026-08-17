@@ -12,6 +12,12 @@ const userSchema = new mongoose.Schema({
   tokenVersion: { type: Number, default: 0, min: 0 },
 }, { timestamps: true })
 
-userSchema.index({ email: 1 }, { unique: true })
+// email uniqueness index already defined inline via `unique: true` on field
+userSchema.index({ role: 1, status: 1 })           // admin user filter queries
+userSchema.index({ createdAt: -1, _id: -1 })        // admin pagination (newest first)
+userSchema.index({ fullName: 'text', email: 'text' }, { // admin search by name/email
+  weights: { fullName: 10, email: 5 },
+  name: 'user_text_search',
+})
 
 export const User = mongoose.model('User', userSchema)

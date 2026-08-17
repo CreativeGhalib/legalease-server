@@ -1,10 +1,14 @@
 import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
+import mongoSanitize from 'express-mongo-sanitize'
+import xssClean from 'xss-clean'
+import compression from 'compression'
 import { env } from './config/env.js'
 import { ensureDatabaseConnection } from './config/database.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { notFound } from './middleware/notFound.js'
+import { apiLimiter, authLimiter, uploadLimiter } from './middleware/rateLimiter.js'
 import healthRouter from './routes/healthRoutes.js'
 import authRouter from './routes/authRoutes.js'
 import lawyerRouter from './routes/lawyerRoutes.js'
@@ -17,29 +21,40 @@ import adminRouter from './routes/adminRoutes.js'
 
 const app = express()
 
+// ── Proxy trust ────────────────────────────────────────────────────────────────
 // Vercel terminates the public request before forwarding it to this Express app.
 // Trust exactly that proxy hop so targeted rate limits identify the browser rather
 // than the shared Vercel address. Local development continues to use Express defaults.
 if (process.env.VERCEL) app.set('trust proxy', 1)
 
+// ── Security headers ───────────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: env.GOOGLE_CLIENT_ID ? {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", 'https://accounts.google.com'],
-      frameSrc: ["'self'", 'https://accounts.google.com'],
-      connectSrc: ["'self'", 'https://accounts.google.com'],
+      scriptSrc: ["'self'", 'https://accounts.google.com', 'https://js.stripe.com'],
+      frameSrc: ["'self'", 'https://accounts.google.com', 'https://js.stripe.com'],
+      connectSrc: ["'self'", 'https://accounts.google.com', ...env.clientOrigins],
       imgSrc: ["'self'", 'data:', 'https://lh3.googleusercontent.com', 'https://i.ibb.co'],
     },
   } : undefined,
+  // crossOriginEmbedderPolicy breaks Stripe elements — keep off
+  crossOriginEmbedderPolicy: false,
 }))
+
+// ── CORS ───────────────────────────────────────────────────────────────────────
 app.use(cors({
   credentials: true,
   origin(origin, callback) {
     if (!origin || env.clientOrigins.includes(origin)) return callback(null, true)
-    return callback(Object.assign(new Error('Origin is not allowed by CORS.'), { statusCode: 403, code: 'CORS_ORIGIN_DENIED' }))
+    return callback(Object.assign(
+      new Error('Origin is not allowed by CORS.'),
+      { statusCode: 403, code: 'CORS_ORIGIN_DENIED' }
+    ))
   },
 }))
+
+// ── Vercel serverless DB connection ────────────────────────────────────────────
 if (process.env.VERCEL) {
   app.use(async (request, response, next) => {
     try {
@@ -50,8 +65,29 @@ if (process.env.VERCEL) {
     }
   })
 }
+
+// ── Stripe webhook (raw body BEFORE json parser) ───────────────────────────────
 app.use('/api/payments', stripeWebhookRouter)
+
+// ── Body parsing ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '100kb' }))
+
+// ── Input sanitization ─────────────────────────────────────────────────────────
+// Strip $ and . operators from req.body/params/query (prevents NoSQL injection)
+app.use(mongoSanitize())
+// Strip HTML tags from input (prevents stored XSS via user-supplied content)
+app.use(xssClean())
+
+// ── Compression ────────────────────────────────────────────────────────────────
+// Gzip/Brotli JSON responses — reduces bandwidth 60-80%, free performance
+app.use(compression())
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+app.use('/api', apiLimiter)
+app.use('/api/auth', authLimiter)
+app.use('/api/uploads', uploadLimiter)
+
+// ── Routes ─────────────────────────────────────────────────────────────────────
 app.use('/api/health', healthRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/users', userRouter)
@@ -62,6 +98,8 @@ app.use('/api/lawyers', lawyerCommentRouter)
 app.use('/api/lawyers', lawyerRouter)
 app.use('/api/uploads', uploadRouter)
 app.use('/api/payments', paymentRouter)
+
+// ── Error handling ─────────────────────────────────────────────────────────────
 app.use(notFound)
 app.use(errorHandler)
 

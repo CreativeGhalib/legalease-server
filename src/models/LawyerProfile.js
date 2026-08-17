@@ -21,4 +21,17 @@ const lawyerProfileSchema = new mongoose.Schema({
   paidHireCount: { type: Number, min: 0, default: 0 },
 }, { timestamps: true })
 
+// userId uniqueness already defined inline above
+lawyerProfileSchema.index({ publicationStatus: 1, availability: 1 })   // public browse filter
+lawyerProfileSchema.index({ publicationStatus: 1, createdAt: -1, _id: -1 }) // admin pagination
+lawyerProfileSchema.index({ verificationStatus: 1 })                    // payment eligibility checks
+lawyerProfileSchema.index({                                              // full-text search
+  specialization: 'text',
+  fullName: 'text',
+  bio: 'text',
+}, {
+  weights: { specialization: 10, fullName: 8, bio: 1 },
+  name: 'lawyer_text_search',
+})
+
 export const LawyerProfile = mongoose.model('LawyerProfile', lawyerProfileSchema)

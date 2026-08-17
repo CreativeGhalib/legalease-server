@@ -19,4 +19,9 @@ const paymentTransactionSchema = new mongoose.Schema({
 paymentTransactionSchema.index({ lawyerProfileId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'lawyer_verification' } })
 paymentTransactionSchema.index({ hiringRequestId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'hiring_fee' } })
 
+// stripeCheckoutSessionId and stripePaymentIntentId uniqueness defined inline above
+paymentTransactionSchema.index({ payerId: 1, createdAt: -1, _id: -1 })  // user transaction history
+paymentTransactionSchema.index({ lawyerId: 1, createdAt: -1, _id: -1 }) // lawyer transaction history
+paymentTransactionSchema.index({ type: 1, status: 1, createdAt: -1 })   // admin filter + sort
+
 export const PaymentTransaction = mongoose.model('PaymentTransaction', paymentTransactionSchema)
