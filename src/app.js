@@ -1,9 +1,8 @@
 import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
-import mongoSanitize from 'express-mongo-sanitize'
-import xssClean from 'xss-clean'
 import compression from 'compression'
+import { sanitizeBody } from './middleware/sanitize.js'
 import { env } from './config/env.js'
 import { ensureDatabaseConnection } from './config/database.js'
 import { errorHandler } from './middleware/errorHandler.js'
@@ -73,10 +72,10 @@ app.use('/api/payments', stripeWebhookRouter)
 app.use(express.json({ limit: '100kb' }))
 
 // ── Input sanitization ─────────────────────────────────────────────────────────
-// Strip $ and . operators from req.body/params/query (prevents NoSQL injection)
-app.use(mongoSanitize())
-// Strip HTML tags from input (prevents stored XSS via user-supplied content)
-app.use(xssClean())
+// Strip MongoDB $ and . operators from req.body (Express 5 compatible).
+// express-mongo-sanitize mutates req.query which is read-only in Express 5.
+// Query-string injection is handled by Zod validators in every route.
+app.use(sanitizeBody)
 
 // ── Compression ────────────────────────────────────────────────────────────────
 // Gzip/Brotli JSON responses — reduces bandwidth 60-80%, free performance

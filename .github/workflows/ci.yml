@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Test
+    name: Syntax → Test
     runs-on: ubuntu-latest
 
     steps:
@@ -25,8 +25,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Syntax check all source files — catches import errors, typos, broken ES modules
+      - name: Syntax check (node --check)
+        run: |
+          find src -name "*.js" | xargs node --check
+          echo "All source files passed syntax check"
+
+      # Run unit + integration tests
+      # DB integration tests are skipped unless TEST_MONGODB_URI is set (safe for CI)
       - name: Run tests
         run: npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-secret-minimum-32-characters-long' }}
+          CLIENT_ORIGINS: 'http://localhost:5173'
 
   deploy:
     name: Deploy to Vercel
@@ -41,7 +53,7 @@ jobs:
       - name: Deploy to Vercel
         run: npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}`
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_BACKEND_PROJECT_ID }}
           NODE_ENV: production
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
