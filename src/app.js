@@ -20,6 +20,7 @@ import commentRouter, { lawyerCommentRouter } from './routes/commentRoutes.js'
 import adminRouter from './routes/adminRoutes.js'
 import reviewRouter from './routes/reviewRoutes.js'
 import publicRouter from './routes/publicRoutes.js'
+import notificationRouter from './routes/notificationRoutes.js'
 
 const app = express()
 
@@ -107,6 +108,7 @@ app.use('/api/uploads', uploadRouter)
 app.use('/api/payments', paymentRouter)
 app.use('/api/reviews', reviewRouter)
 app.use('/api', publicRouter)
+app.use('/api/notifications', notificationRouter)
 
 // ── Error handling ─────────────────────────────────────────────────────────────
 app.use(notFound)

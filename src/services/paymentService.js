@@ -6,6 +6,7 @@ import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { HiringRequest } from '../models/HiringRequest.js'
 import { User } from '../models/User.js'
 import { sendPaymentConfirmationEmail } from './emailService.js'
+import { createNotification } from './notificationService.js'
 
 function error(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
 export function isProfileComplete(profile) { return Boolean(profile.professionalPhotoUrl && profile.specialization && profile.bio && profile.consultationFeeMinor > 0 && Number.isInteger(profile.experienceYears) && profile.experienceYears >= 0 && profile.licenseNumber) }
@@ -92,6 +93,13 @@ export async function fulfillVerificationSession(session) {
   const verifyingLawyer = await User.findById(transaction.payerId).select('fullName email')
   if (verifyingLawyer) {
     await sendPaymentConfirmationEmail(verifyingLawyer, verifyingLawyer, transaction.amountMinor, transaction.currency)
+    await createNotification({
+      userId: verifyingLawyer._id,
+      title: 'Profile verification complete',
+      message: `Your $${(transaction.amountMinor / 100).toFixed(2)} verification payment is confirmed. Publishing your profile is now unlocked.`,
+      type: 'payment',
+      link: '/dashboard/lawyer/manage-legal-profile',
+    })
   }
 }
 
@@ -139,6 +147,20 @@ export async function fulfillHiringSession(session) {
   ])
   if (hiringClient && hiringLawyer) {
     await sendPaymentConfirmationEmail(hiringClient, hiringLawyer, request.feeMinorSnapshot, request.currency)
+    await createNotification({
+      userId: hiringClient._id,
+      title: `Payment of $${(request.feeMinorSnapshot / 100).toFixed(2)} confirmed`,
+      message: `Your consultation fee to ${hiringLawyer.fullName} (${request.specializationSnapshot}) is verified.`,
+      type: 'payment',
+      link: '/dashboard/user/hiring-history',
+    })
+    await createNotification({
+      userId: hiringLawyer._id,
+      title: `Consultation fee received — $${(request.feeMinorSnapshot / 100).toFixed(2)}`,
+      message: `${hiringClient.fullName} paid for the accepted ${request.specializationSnapshot} engagement.`,
+      type: 'payment',
+      link: '/dashboard/lawyer/hiring-history',
+    })
   }
 }
 

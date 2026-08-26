@@ -5,6 +5,7 @@ import { User } from '../models/User.js'
 import { Review } from '../models/Review.js'
 import { logger } from '../config/logger.js'
 import { sendHireDecisionEmail, sendHireExpiredEmail, sendHireRequestEmail } from './emailService.js'
+import { createNotification } from './notificationService.js'
 
 const RESPONSE_SLA_MS = 48 * 60 * 60 * 1000
 
@@ -34,6 +35,13 @@ async function transitionExpiredRequests(matchFilter) {
           { path: 'lawyerId', select: 'fullName' },
         ])
         await sendHireExpiredEmail(populated.clientId, populated.lawyerId, populated)
+        await createNotification({
+          userId: populated.clientId._id ?? populated.clientId,
+          title: 'Hire request expired',
+          message: `No response within 48 hours — your ${populated.specializationSnapshot} request was closed automatically.`,
+          type: 'sla_expired',
+          link: '/dashboard/user/hiring-history',
+        })
       } catch (error) {
         logger.warn('Hiring expiry notification failed.', { error: error.message, requestId: String(doc._id) })
       }
@@ -61,6 +69,13 @@ export async function createHiringRequest(client, lawyerProfileId) {
   try {
     const request = await HiringRequest.create({ clientId: client.id, lawyerId: lawyer.id, lawyerProfileId: profile.id, specializationSnapshot: profile.specialization, feeMinorSnapshot: profile.consultationFeeMinor, currency: profile.currency, status: 'pending', paymentStatus: 'unpaid', expiresAt: new Date(Date.now() + RESPONSE_SLA_MS) })
     await sendHireRequestEmail(lawyer, client, request)
+    await createNotification({
+      userId: lawyer.id,
+      title: `New hire request from ${client.fullName}`,
+      message: `${client.fullName} requested ${profile.specialization} · $${(profile.consultationFeeMinor / 100).toFixed(2)}. Respond within 48 hours.`,
+      type: 'hire_request',
+      link: '/dashboard/lawyer/hiring-history',
+    })
     return safeRequest(await request.populate(clientPopulate), 'client')
   } catch (error) {
     if (error?.code === 11000) throw fail('You already have a hiring request with this lawyer.', 409, 'HIRING_REQUEST_ALREADY_EXISTS')
@@ -96,6 +111,15 @@ export async function decideHiringRequest(id, lawyer, decision) {
   const request = await HiringRequest.findOneAndUpdate({ _id: id, lawyerId: lawyer.id, status: 'pending' }, { $set: { status: decision, decisionAt: new Date() } }, { returnDocument: 'after' }).populate(lawyerPopulate)
   if (request) {
     await sendHireDecisionEmail(request.clientId, lawyer, decision)
+    await createNotification({
+      userId: request.clientId._id ?? request.clientId,
+      title: `Your hire request was ${decision}`,
+      message: decision === 'accepted'
+        ? `${lawyer.fullName} accepted your ${request.specializationSnapshot} request. Payment is now available.`
+        : `${lawyer.fullName} declined your ${request.specializationSnapshot} request.`,
+      type: 'hire_decision',
+      link: '/dashboard/user/hiring-history',
+    })
     return safeRequest(request, 'lawyer')
   }
   const existing = await HiringRequest.findById(id).select('lawyerId status')
