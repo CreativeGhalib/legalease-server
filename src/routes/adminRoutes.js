@@ -75,6 +75,13 @@ adminRouter.patch(
   adminController.resolveDispute,
 )
 adminRouter.post(
+  '/transactions/:id/refund',
+  adminMutationRateLimit,
+  verifyOrigin,
+  validate(releaseOverrideSchema),
+  adminController.refundTransactionOverride,
+)
+adminRouter.post(
   '/transactions/:id/release',
   adminMutationRateLimit,
   verifyOrigin,

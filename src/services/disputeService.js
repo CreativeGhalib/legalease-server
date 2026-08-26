@@ -142,12 +142,46 @@ export async function resolveDispute(admin, disputeId, { outcome, note }) {
   return closed
 }
 
+export async function adminRefundTransaction(admin, txnId, note) {
+  if (!isValidId(txnId)) throw fail('Transaction was not found.', 404, 'PAYMENT_NOT_FOUND')
+
+  const transaction = await PaymentTransaction.findOne({ _id: txnId, type: 'hiring_fee', status: 'paid', escrowStatus: { $in: ['held', 'disputed'] } })
+  if (!transaction) throw fail('No refundable held escrow found for this transaction.', 409, 'ESCROW_NOT_REFUNDABLE')
+
+  const updated = await PaymentTransaction.findOneAndUpdate(
+    { _id: transaction._id, status: 'paid', escrowStatus: { $in: ['held', 'disputed'] } },
+    {
+      $set: {
+        status: 'refunded',
+        escrowStatus: 'refunded',
+        refundAmountMinor: transaction.amountMinor,
+      },
+    },
+    { new: true },
+  )
+  if (!updated) throw fail('This dispute is already resolved.', 409, 'DISPUTE_ALREADY_RESOLVED')
+
+  if (transaction.hiringRequestId) {
+    await Dispute.updateMany(
+      { hiringRequestId: transaction.hiringRequestId, status: 'open' },
+      { $set: { status: 'resolved_refund', resolvedById: admin.id, resolutionNote: note } },
+    )
+    await HiringRequest.updateOne({ _id: transaction.hiringRequestId }, { $set: { disputeStatus: 'resolved' } })
+
+    const engagement = await HiringRequest.findById(transaction.hiringRequestId)
+    if (engagement) {
+      await notifyParties(engagement, 'Payment refunded by admin', `An administrator refunded the $${(transaction.amountMinor / 100).toFixed(2)} payment for the ${engagement.specializationSnapshot} engagement. Note: ${note}`)
+    }
+  }
+  return updated
+}
+
 export async function forceReleaseEscrow(admin, txnId, note) {
   if (!isValidId(txnId)) throw fail('Transaction was not found.', 404, 'PAYMENT_NOT_FOUND')
 
   const updated = await PaymentTransaction.findOneAndUpdate(
     { _id: txnId, status: 'paid', escrowStatus: { $in: ['held', 'disputed'] }, type: 'hiring_fee' },
-    { $set: { escrowStatus: 'released', releaseReason: 'admin', releasedAt: now() } },
+    { $set: { escrowStatus: 'released', releaseReason: 'admin', releasedAt: new Date() } },
     { new: true },
   )
   if (!updated) throw fail('No releasable held escrow found for this transaction.', 409, 'ESCROW_NOT_RELEASABLE')
@@ -166,8 +200,4 @@ export async function forceReleaseEscrow(admin, txnId, note) {
     }
   }
   return updated
-}
-
-function now() {
-  return new Date()
 }

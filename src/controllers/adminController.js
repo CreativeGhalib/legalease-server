@@ -6,7 +6,7 @@ import { Dispute } from '../models/Dispute.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { isProfileComplete, releaseEscrowDueFor } from '../services/paymentService.js'
 import { sendProfilePublishedEmail } from '../services/emailService.js'
-import { resolveDispute as resolveDisputeService, forceReleaseEscrow as forceReleaseEscrowService } from '../services/disputeService.js'
+import { resolveDispute as resolveDisputeService, forceReleaseEscrow as forceReleaseEscrowService, adminRefundTransaction } from '../services/disputeService.js'
 import { logger } from '../config/logger.js'
 import { sendCsvResponse } from '../utils/csv.js'
 
@@ -445,6 +445,15 @@ export async function releaseEscrowOverride(req, res, next) {
   }
 }
 
+export async function refundTransactionOverride(req, res, next) {
+  try {
+    const updated = await adminRefundTransaction(req.auth.user, req.params.id, req.body.note)
+    res.json({ success: true, data: { id: String(updated._id), status: updated.status, escrowStatus: updated.escrowStatus } })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function listTransactions(req, res, next) {
   try {
     await releaseEscrowDueFor({})
@@ -480,6 +489,8 @@ export async function listTransactions(req, res, next) {
           amountMinor: transaction.amountMinor,
           currency: transaction.currency,
           status: transaction.status,
+          escrowStatus: transaction.escrowStatus ?? null,
+          hiringRequestId: transaction.hiringRequestId ? String(transaction.hiringRequestId) : null,
           createdAt: transaction.createdAt,
           paidAt: transaction.paidAt,
         })),
