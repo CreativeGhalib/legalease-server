@@ -7,6 +7,7 @@ import { env } from './config/env.js'
 import { ensureDatabaseConnection } from './config/database.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { notFound } from './middleware/notFound.js'
+import { requestLogger } from './middleware/requestLogger.js'
 import { apiLimiter, authLimiter, uploadLimiter } from './middleware/rateLimiter.js'
 import healthRouter from './routes/healthRoutes.js'
 import authRouter from './routes/authRoutes.js'
@@ -19,6 +20,11 @@ import commentRouter, { lawyerCommentRouter } from './routes/commentRoutes.js'
 import adminRouter from './routes/adminRoutes.js'
 
 const app = express()
+
+// ── Request correlation ─────────────────────────────────────────────────────
+// Must run before every other middleware so logs, errors, and responses all
+// share one request identity for the full lifetime of the request.
+app.use(requestLogger)
 
 // ── Proxy trust ────────────────────────────────────────────────────────────────
 // Vercel terminates the public request before forwarding it to this Express app.

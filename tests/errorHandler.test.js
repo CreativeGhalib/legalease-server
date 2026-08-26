@@ -33,16 +33,18 @@ test('errorHandler logs 5xx failures with request context via winston', () => {
 
   const entries = captureLoggerErrors(() => {
     const response = fakeResponse()
-    errorHandler(failure, { method: 'POST', path: '/api/probe' }, response, () => {})
+    errorHandler(failure, { requestId: 'req-test-1', method: 'POST', path: '/api/probe' }, response, () => {})
     assert.equal(response.statusCode, 500)
     assert.deepEqual(response.body, {
       success: false,
+      requestId: 'req-test-1',
       error: { code: 'DB_OUTAGE', message: 'database exploded' },
     })
   })
 
   assert.equal(entries.length, 1)
   assert.equal(entries[0].message, 'Unhandled server error')
+  assert.equal(entries[0].meta.requestId, 'req-test-1')
   assert.equal(entries[0].meta.method, 'POST')
   assert.equal(entries[0].meta.path, '/api/probe')
   assert.equal(entries[0].meta.error, 'database exploded')
@@ -55,10 +57,11 @@ test('errorHandler keeps client-facing error responses unchanged and skips loggi
 
   const entries = captureLoggerErrors(() => {
     const response = fakeResponse()
-    errorHandler(notFound, { method: 'GET', path: '/api/nothing' }, response, () => {})
+    errorHandler(notFound, { requestId: 'req-test-2', method: 'GET', path: '/api/nothing' }, response, () => {})
     assert.equal(response.statusCode, 404)
     assert.deepEqual(response.body, {
       success: false,
+      requestId: 'req-test-2',
       error: { code: 'NOT_FOUND', message: 'Missing record.' },
     })
   })

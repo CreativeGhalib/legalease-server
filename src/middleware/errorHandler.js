@@ -21,6 +21,7 @@ export function errorHandler(error, request, response, _next) {
 
   response.status(statusCode).json({
     success: false,
+    requestId: request.requestId,
     error: { code: bodyTooLarge ? 'REQUEST_TOO_LARGE' : error.code ?? 'INTERNAL_ERROR', message },
   })
 }
