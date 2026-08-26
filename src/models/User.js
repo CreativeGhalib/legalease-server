@@ -10,6 +10,8 @@ const userSchema = new mongoose.Schema({
   googleSub: { type: String, sparse: true, unique: true },
    status: { type: String, enum: ['active', 'deactivated'], default: 'active' },
   tokenVersion: { type: Number, default: 0, min: 0 },
+  failedLoginAttempts: { type: Number, default: 0, min: 0 },
+  accountLockedUntil: { type: Date, select: false, default: null },
   passwordResetToken: { type: String, select: false, default: null },
   passwordResetExpires: { type: Date, select: false, default: null },
 }, { timestamps: true })

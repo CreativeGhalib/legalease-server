@@ -6,11 +6,21 @@ import { logger } from '../config/logger.js'
 import { clearSessionCookie, createSessionToken, setSessionCookie, toSafeUser } from '../utils/auth.js'
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000
+const LOGIN_FAILURE_LOCK_LIMIT = 5
+const LOGIN_LOCK_DURATION_MS = 30 * 60 * 1000
 
 function invalidCredentialsError() {
   const error = new Error('Invalid email or password.')
   error.statusCode = 401
   error.code = 'INVALID_CREDENTIALS'
+  return error
+}
+
+function accountLockedError(lockedUntil) {
+  const minutes = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / (60 * 1000)))
+  const error = new Error(`Account temporarily locked. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`)
+  error.statusCode = 429
+  error.code = 'ACCOUNT_TEMPORARILY_LOCKED'
   return error
 }
 
@@ -55,9 +65,24 @@ export async function register(request, response, next) {
 export async function login(request, response, next) {
   try {
     const { email, password } = request.body
-    const user = await User.findOne({ email }).select('+passwordHash')
+    const user = await User.findOne({ email }).select('+passwordHash +accountLockedUntil')
     if (!user || !user.passwordHash || user.status !== 'active') throw invalidCredentialsError()
-    if (!(await bcrypt.compare(password, user.passwordHash))) throw invalidCredentialsError()
+    if (user.accountLockedUntil && user.accountLockedUntil.getTime() > Date.now()) {
+      throw accountLockedError(user.accountLockedUntil)
+    }
+    if (!(await bcrypt.compare(password, user.passwordHash))) {
+      user.failedLoginAttempts += 1
+      if (user.failedLoginAttempts >= LOGIN_FAILURE_LOCK_LIMIT) {
+        user.accountLockedUntil = new Date(Date.now() + LOGIN_LOCK_DURATION_MS)
+      }
+      await user.save()
+      throw invalidCredentialsError()
+    }
+    if (user.failedLoginAttempts > 0 || user.accountLockedUntil) {
+      user.failedLoginAttempts = 0
+      user.accountLockedUntil = null
+      await user.save()
+    }
     setSessionCookie(response, createSessionToken(user))
     return response.status(200).json({ success: true, data: { user: toSafeUser(user) } })
   } catch (error) {
