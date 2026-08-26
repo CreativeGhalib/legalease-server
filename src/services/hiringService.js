@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import { HiringRequest } from '../models/HiringRequest.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { User } from '../models/User.js'
+import { Review } from '../models/Review.js'
 import { sendHireDecisionEmail, sendHireRequestEmail } from './emailService.js'
 
 function fail(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
@@ -30,7 +31,14 @@ export async function createHiringRequest(client, lawyerProfileId) {
   }
 }
 
-export async function listClientRequests(clientId) { return (await HiringRequest.find({ clientId }).sort({ createdAt: -1, _id: -1 }).populate(clientPopulate)).map((request) => safeRequest(request, 'client')) }
+export async function listClientRequests(clientId) {
+  const requests = await HiringRequest.find({ clientId }).sort({ createdAt: -1, _id: -1 }).populate(clientPopulate)
+  const reviewedIds = new Set(
+    (await Review.find({ hiringRequestId: { $in: requests.map((request) => request._id) } }).select('hiringRequestId'))
+      .map((review) => String(review.hiringRequestId)),
+  )
+  return requests.map((request) => ({ ...safeRequest(request, 'client'), reviewed: reviewedIds.has(String(request._id)) }))
+}
 export async function listLawyerRequests(lawyerId) { return (await HiringRequest.find({ lawyerId }).sort({ createdAt: -1, _id: -1 }).populate(lawyerPopulate)).map((request) => safeRequest(request, 'lawyer')) }
 
 export async function getScopedRequest(id, user) {

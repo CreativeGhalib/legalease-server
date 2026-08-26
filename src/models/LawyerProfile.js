@@ -15,6 +15,8 @@ const lawyerProfileSchema = new mongoose.Schema({
   languages: { type: [String], default: [] },
   availability: { type: String, enum: ['available', 'busy'], default: 'available' },
   tier: { type: String, enum: ['bronze', 'silver', 'gold'], default: 'bronze' },
+  averageRating: { type: Number, min: 0, max: 5, default: 0 },
+  reviewCount: { type: Number, min: 0, default: 0 },
   verificationStatus: { type: String, enum: ['unpaid', 'checkout_created', 'paid'], default: 'unpaid' },
   verificationPaidAt: { type: Date, default: null },
   publicationStatus: { type: String, enum: ['draft', 'published', 'unpublished', 'suspended', 'deleted'], default: 'draft' },
