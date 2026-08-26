@@ -3,7 +3,44 @@ import { HiringRequest } from '../models/HiringRequest.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { User } from '../models/User.js'
 import { Review } from '../models/Review.js'
-import { sendHireDecisionEmail, sendHireRequestEmail } from './emailService.js'
+import { logger } from '../config/logger.js'
+import { sendHireDecisionEmail, sendHireExpiredEmail, sendHireRequestEmail } from './emailService.js'
+
+const RESPONSE_SLA_MS = 48 * 60 * 60 * 1000
+
+async function transitionExpiredRequests(matchFilter) {
+  const now = new Date()
+  const due = await HiringRequest.find({
+    ...matchFilter,
+    status: 'pending',
+    expiresAt: { $ne: null, $lt: now },
+  }).select('_id').lean()
+
+  const transitioned = []
+  for (const doc of due) {
+    const updated = await HiringRequest.findOneAndUpdate(
+      { _id: doc._id, status: 'pending' },
+      { $set: { status: 'expired' } },
+      { new: true },
+    )
+    if (updated) transitioned.push(updated)
+  }
+
+  if (transitioned.length) {
+    for (const doc of transitioned) {
+      try {
+        const populated = await doc.populate([
+          { path: 'clientId', select: 'fullName email' },
+          { path: 'lawyerId', select: 'fullName' },
+        ])
+        await sendHireExpiredEmail(populated.clientId, populated.lawyerId, populated)
+      } catch (error) {
+        logger.warn('Hiring expiry notification failed.', { error: error.message, requestId: String(doc._id) })
+      }
+    }
+  }
+  return transitioned.length
+}
 
 function fail(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
 function safeRequest(request, viewer) {
@@ -22,7 +59,7 @@ export async function createHiringRequest(client, lawyerProfileId) {
   const lawyer = await User.findOne({ _id: profile.userId, role: 'lawyer', status: 'active' })
   if (!lawyer) throw fail('This lawyer is not available for hire.', 404, 'LAWYER_NOT_HIREABLE')
   try {
-    const request = await HiringRequest.create({ clientId: client.id, lawyerId: lawyer.id, lawyerProfileId: profile.id, specializationSnapshot: profile.specialization, feeMinorSnapshot: profile.consultationFeeMinor, currency: profile.currency, status: 'pending', paymentStatus: 'unpaid' })
+    const request = await HiringRequest.create({ clientId: client.id, lawyerId: lawyer.id, lawyerProfileId: profile.id, specializationSnapshot: profile.specialization, feeMinorSnapshot: profile.consultationFeeMinor, currency: profile.currency, status: 'pending', paymentStatus: 'unpaid', expiresAt: new Date(Date.now() + RESPONSE_SLA_MS) })
     await sendHireRequestEmail(lawyer, client, request)
     return safeRequest(await request.populate(clientPopulate), 'client')
   } catch (error) {
@@ -32,6 +69,7 @@ export async function createHiringRequest(client, lawyerProfileId) {
 }
 
 export async function listClientRequests(clientId) {
+  await transitionExpiredRequests({ clientId })
   const requests = await HiringRequest.find({ clientId }).sort({ createdAt: -1, _id: -1 }).populate(clientPopulate)
   const reviewedIds = new Set(
     (await Review.find({ hiringRequestId: { $in: requests.map((request) => request._id) } }).select('hiringRequestId'))
@@ -39,10 +77,14 @@ export async function listClientRequests(clientId) {
   )
   return requests.map((request) => ({ ...safeRequest(request, 'client'), reviewed: reviewedIds.has(String(request._id)) }))
 }
-export async function listLawyerRequests(lawyerId) { return (await HiringRequest.find({ lawyerId }).sort({ createdAt: -1, _id: -1 }).populate(lawyerPopulate)).map((request) => safeRequest(request, 'lawyer')) }
+export async function listLawyerRequests(lawyerId) {
+  await transitionExpiredRequests({ lawyerId })
+  return (await HiringRequest.find({ lawyerId }).sort({ createdAt: -1, _id: -1 }).populate(lawyerPopulate)).map((request) => safeRequest(request, 'lawyer'))
+}
 
 export async function getScopedRequest(id, user) {
   if (!mongoose.isObjectIdOrHexString(id)) throw fail('Hiring request was not found.', 404, 'HIRING_REQUEST_NOT_FOUND')
+  await transitionExpiredRequests({ _id: new mongoose.Types.ObjectId(id) })
   const request = await HiringRequest.findById(id).populate(user.role === 'user' ? clientPopulate : lawyerPopulate)
   if (!request || (String(request.clientId?._id ?? request.clientId) !== String(user.id) && String(request.lawyerId?._id ?? request.lawyerId) !== String(user.id))) throw fail('Hiring request was not found.', 404, 'HIRING_REQUEST_NOT_FOUND')
   return safeRequest(request, String(request.clientId?._id ?? request.clientId) === String(user.id) ? 'client' : 'lawyer')
@@ -50,6 +92,7 @@ export async function getScopedRequest(id, user) {
 
 export async function decideHiringRequest(id, lawyer, decision) {
   if (!mongoose.isObjectIdOrHexString(id)) throw fail('Hiring request was not found.', 404, 'HIRING_REQUEST_NOT_FOUND')
+  await transitionExpiredRequests({ _id: new mongoose.Types.ObjectId(id) })
   const request = await HiringRequest.findOneAndUpdate({ _id: id, lawyerId: lawyer.id, status: 'pending' }, { $set: { status: decision, decisionAt: new Date() } }, { returnDocument: 'after' }).populate(lawyerPopulate)
   if (request) {
     await sendHireDecisionEmail(request.clientId, lawyer, decision)
@@ -57,5 +100,6 @@ export async function decideHiringRequest(id, lawyer, decision) {
   }
   const existing = await HiringRequest.findById(id).select('lawyerId status')
   if (!existing || String(existing.lawyerId) !== String(lawyer.id)) throw fail('Hiring request was not found.', 404, 'HIRING_REQUEST_NOT_FOUND')
+  if (existing.status === 'expired') throw fail('This request expired without a response and can no longer be decided.', 409, 'HIRING_REQUEST_EXPIRED')
   throw fail('Only a pending hiring request can be decided once.', 409, 'HIRING_REQUEST_ALREADY_DECIDED')
 }

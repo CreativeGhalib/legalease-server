@@ -96,6 +96,17 @@ export function buildProfilePublishedEmail(lawyer) {
   }
 }
 
+export function buildHireExpiredEmail(client, lawyer, hiringRequest) {
+  return {
+    to: client.email,
+    subject: 'Your hire request expired without a response — LegalEase',
+    html: renderEmail({
+      title: 'Your hire request has expired',
+      bodyHtml: `<p>Your request to <strong>${lawyer.fullName}</strong> for <strong>${hiringRequest.specializationSnapshot}</strong> was automatically closed after 48 hours without a decision. You can send a new request to any available lawyer at any time.</p>`,
+    }),
+  }
+}
+
 async function deliver(payload) {
   if (!payload) return
   await sendMail(payload.to, payload.subject, payload.html)
@@ -116,4 +127,8 @@ export async function sendPaymentConfirmationEmail(client, lawyer, amountMinor, 
 
 export async function sendProfilePublishedEmail(lawyer) {
   await deliver(buildProfilePublishedEmail(lawyer))
+}
+
+export async function sendHireExpiredEmail(client, lawyer, hiringRequest) {
+  await deliver(buildHireExpiredEmail(client, lawyer, hiringRequest))
 }

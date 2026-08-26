@@ -7,10 +7,11 @@ const hiringRequestSchema = new mongoose.Schema({
   specializationSnapshot: { type: String, required: true, trim: true, maxlength: 100 },
   feeMinorSnapshot: { type: Number, required: true, min: 1 },
   currency: { type: String, required: true, enum: ['USD'] },
-  status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+  status: { type: String, enum: ['pending', 'accepted', 'rejected', 'expired'], default: 'pending' },
   paymentStatus: { type: String, enum: ['unpaid', 'checkout_created', 'paid'], default: 'unpaid' },
   decisionAt: { type: Date, default: null },
   paidAt: { type: Date, default: null },
+  expiresAt: { type: Date, default: null },
 }, { timestamps: true })
 
 hiringRequestSchema.index({ clientId: 1, lawyerProfileId: 1 }, { unique: true })
