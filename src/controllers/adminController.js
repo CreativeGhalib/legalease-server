@@ -129,6 +129,9 @@ export async function updateStatus(req, res, next) {
     const user = await requireUser(req.params.id)
     await protectLastAdmin(user, { status: req.body.status })
 
+    if (req.body.status === 'deactivated') {
+      user.tokenVersion = (user.tokenVersion || 0) + 1
+    }
     user.status = req.body.status
     await user.save()
 
