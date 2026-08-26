@@ -130,14 +130,29 @@ export async function createHiringCheckout(user, requestId, { stripe: injectedSt
   throw error('Checkout is being prepared. Please try again.', 409, 'CHECKOUT_IN_PROGRESS')
 }
 
-export async function fulfillHiringSession(session) {
-  if (session.payment_status !== 'paid' || session.metadata?.type !== 'hiring_fee') return
-  const transaction = await PaymentTransaction.findById(session.metadata.transactionId)
-  if (!transaction || transaction.type !== 'hiring_fee' || transaction.stripeCheckoutSessionId !== session.id || String(transaction.hiringRequestId) !== session.metadata.hiringRequestId || transaction.amountMinor !== session.amount_total || transaction.currency !== session.currency) throw error('Payment session cannot be reconciled.', 400, 'INVALID_PAYMENT_SESSION')
-  const request = await HiringRequest.findById(transaction.hiringRequestId)
-  if (!request || request.status !== 'accepted' || String(request.clientId) !== String(transaction.payerId) || String(request.lawyerId) !== String(transaction.lawyerId) || String(request.lawyerProfileId) !== String(transaction.lawyerProfileId) || String(request.id) !== session.metadata.hiringRequestId || String(request.lawyerId) !== session.metadata.lawyerId || String(request.lawyerProfileId) !== session.metadata.lawyerProfileId || request.feeMinorSnapshot !== transaction.amountMinor || request.currency.toLowerCase() !== transaction.currency) throw error('Payment session cannot be reconciled.', 400, 'INVALID_PAYMENT_SESSION')
-  const paidAt = transaction.paidAt ?? new Date(); const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
-  await PaymentTransaction.updateOne({ _id: transaction.id, status: { $ne: 'paid' } }, { $set: { status: 'paid', paidAt, stripePaymentIntentId: intent, checkoutCreating: false } })
+export async function finalizeVerifiedHiringPayment({ transaction, request, intentId = null, gatewayValId = null, withCommission = false }) {
+  const paidAt = transaction.paidAt ?? new Date()
+  const commissionSplit = withCommission
+    ? {
+        platformCommissionMinor: Math.round(request.feeMinorSnapshot * 0.15),
+        lawyerPayoutMinor: request.feeMinorSnapshot - Math.round(request.feeMinorSnapshot * 0.15),
+      }
+    : {}
+
+  await PaymentTransaction.updateOne(
+    { _id: transaction.id, status: { $ne: 'paid' } },
+    {
+      $set: {
+        status: 'paid',
+        paidAt,
+        checkoutCreating: false,
+        ...(intentId ? { stripePaymentIntentId: intentId } : {}),
+        ...(gatewayValId ? { gatewayValId } : {}),
+        escrowStatus: 'held',
+        ...commissionSplit,
+      },
+    },
+  )
   await HiringRequest.findOneAndUpdate({ _id: request.id, status: 'accepted', paymentStatus: { $ne: 'paid' } }, { $set: { paymentStatus: 'paid', paidAt } }, { returnDocument: 'after' })
   const paidHireCount = await HiringRequest.countDocuments({ lawyerProfileId: request.lawyerProfileId, status: 'accepted', paymentStatus: 'paid' })
   await LawyerProfile.updateOne({ _id: request.lawyerProfileId }, { $max: { paidHireCount } })
@@ -162,6 +177,16 @@ export async function fulfillHiringSession(session) {
       link: '/dashboard/lawyer/hiring-history',
     })
   }
+}
+
+export async function fulfillHiringSession(session) {
+  if (session.payment_status !== 'paid' || session.metadata?.type !== 'hiring_fee') return
+  const transaction = await PaymentTransaction.findById(session.metadata.transactionId)
+  if (!transaction || transaction.type !== 'hiring_fee' || transaction.stripeCheckoutSessionId !== session.id || String(transaction.hiringRequestId) !== session.metadata.hiringRequestId || transaction.amountMinor !== session.amount_total || transaction.currency !== session.currency) throw error('Payment session cannot be reconciled.', 400, 'INVALID_PAYMENT_SESSION')
+  const request = await HiringRequest.findById(transaction.hiringRequestId)
+  if (!request || request.status !== 'accepted' || String(request.clientId) !== String(transaction.payerId) || String(request.lawyerId) !== String(transaction.lawyerId) || String(request.lawyerProfileId) !== String(transaction.lawyerProfileId) || String(request.id) !== session.metadata.hiringRequestId || String(request.lawyerId) !== session.metadata.lawyerId || String(request.lawyerProfileId) !== session.metadata.lawyerProfileId || request.feeMinorSnapshot !== transaction.amountMinor || request.currency.toLowerCase() !== transaction.currency) throw error('Payment session cannot be reconciled.', 400, 'INVALID_PAYMENT_SESSION')
+  const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+  await finalizeVerifiedHiringPayment({ transaction, request, intentId: intent })
 }
 
 // Webhooks are the normal fulfillment path. This server-side reconciliation is

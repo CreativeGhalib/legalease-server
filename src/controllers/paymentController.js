@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import { env } from '../config/env.js'
+import { logger } from '../config/logger.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { HiringRequest } from '../models/HiringRequest.js'
@@ -13,6 +14,7 @@ import {
   reconcilePendingPayment,
   resetExpiredCheckout,
 } from '../services/paymentService.js'
+import { handleSslcommerzIpn, initiateSslcommerzHiringCheckout } from '../services/sslcommerzService.js'
 
 function fail(message, statusCode, code) {
   return Object.assign(new Error(message), { statusCode, code })
@@ -45,6 +47,30 @@ export async function startHiringCheckout(request, response, next) {
       data: { transactionId: transaction.id, checkoutUrl },
     })
   } catch (error) {
+    return next(error)
+  }
+}
+
+// ─── SSLCommerz (bKash / Nagad / local cards) ─────────────────────────────────
+
+export async function startSslcommerzHiringCheckout(request, response, next) {
+  try {
+    const result = await initiateSslcommerzHiringCheckout(request.auth.user, request.params.requestId)
+    return response.status(201).json({ success: true, data: result })
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export async function sslcommerzIpn(request, response, next) {
+  try {
+    const result = await handleSslcommerzIpn(request.body ?? {})
+    return response.status(200).json({ received: true, ...result })
+  } catch (error) {
+    if (['INVALID_IPN'].includes(error.code)) {
+      logger.warn('SSLCommerz IPN rejected.', { error: error.message })
+      return response.status(400).json({ success: false, error: { code: 'INVALID_IPN', message: error.message } })
+    }
     return next(error)
   }
 }
@@ -101,6 +127,8 @@ export async function getPaymentStatus(request, response, next) {
         hiringRequestStatus: hiringRequest?.status,
         hiringPaymentStatus: hiringRequest?.paymentStatus,
         hiringPaidAt: hiringRequest?.paidAt,
+        gateway: transaction.gateway ?? 'stripe',
+        escrowStatus: transaction.escrowStatus ?? null,
       },
     })
   } catch (error) {

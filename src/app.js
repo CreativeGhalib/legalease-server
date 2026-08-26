@@ -13,7 +13,7 @@ import healthRouter from './routes/healthRoutes.js'
 import authRouter from './routes/authRoutes.js'
 import lawyerRouter from './routes/lawyerRoutes.js'
 import uploadRouter from './routes/uploadRoutes.js'
-import paymentRouter, { stripeWebhookRouter } from './routes/paymentRoutes.js'
+import paymentRouter, { sslcommerzIpnRouter, stripeWebhookRouter } from './routes/paymentRoutes.js'
 import userRouter from './routes/userRoutes.js'
 import hiringRouter from './routes/hiringRequestRoutes.js'
 import commentRouter, { lawyerCommentRouter } from './routes/commentRoutes.js'
@@ -76,6 +76,9 @@ if (process.env.VERCEL) {
 
 // ── Stripe webhook (raw body BEFORE json parser) ───────────────────────────────
 app.use('/api/payments', stripeWebhookRouter)
+
+// ── SSLCommerz IPN (form-encoded BEFORE json parser) ──────────────────────────
+app.use('/api/payments/sslcommerz', sslcommerzIpnRouter)
 
 // ── Body parsing ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '100kb' }))

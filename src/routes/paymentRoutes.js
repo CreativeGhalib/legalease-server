@@ -1,15 +1,21 @@
 import express, { Router } from 'express'
-import { getPaymentStatus, listMyPayments, startHiringCheckout, startVerificationCheckout, stripeWebhook } from '../controllers/paymentController.js'
+import { getPaymentStatus, listMyPayments, sslcommerzIpn, startHiringCheckout, startSslcommerzHiringCheckout, startVerificationCheckout, stripeWebhook } from '../controllers/paymentController.js'
 import { authenticate } from '../middleware/authenticate.js'
 import { authorizeRoles } from '../middleware/authorizeRoles.js'
 import { verifyOrigin } from '../middleware/verifyOrigin.js'
-import { checkoutRateLimit } from '../middleware/rateLimits.js'
+import { checkoutRateLimit, ipnRateLimit } from '../middleware/rateLimits.js'
 
 export const stripeWebhookRouter = Router()
 stripeWebhookRouter.post('/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhook)
+
+// IPN arrives as form-encoded before the app-level JSON parser.
+export const sslcommerzIpnRouter = Router()
+sslcommerzIpnRouter.post('/ipn', ipnRateLimit, express.urlencoded({ extended: false }), sslcommerzIpn)
+
 const paymentRouter = Router()
 paymentRouter.post('/publishing/checkout', checkoutRateLimit, authenticate, authorizeRoles('lawyer'), verifyOrigin, startVerificationCheckout)
 paymentRouter.post('/hiring/:requestId/checkout', checkoutRateLimit, authenticate, authorizeRoles('user'), verifyOrigin, startHiringCheckout)
+paymentRouter.post('/hiring/:requestId/sslcommerz/initiate', checkoutRateLimit, authenticate, authorizeRoles('user'), verifyOrigin, startSslcommerzHiringCheckout)
 paymentRouter.get('/mine', authenticate, listMyPayments)
 paymentRouter.get('/:id/status', authenticate, getPaymentStatus)
 export default paymentRouter

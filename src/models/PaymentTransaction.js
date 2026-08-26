@@ -14,6 +14,12 @@ const paymentTransactionSchema = new mongoose.Schema({
   currency: { type: String, required: true, enum: ['usd'] },
   status: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
   paidAt: { type: Date, default: null },
+  gateway: { type: String, enum: ['stripe', 'sslcommerz'], default: 'stripe' },
+  gatewayTranId: { type: String, sparse: true, unique: true },
+  gatewayValId: { type: String, sparse: true, unique: true },
+  escrowStatus: { type: String, enum: ['held'], default: null },
+  platformCommissionMinor: { type: Number, min: 0, default: null },
+  lawyerPayoutMinor: { type: Number, min: 0, default: null },
 }, { timestamps: true })
 
 paymentTransactionSchema.index({ lawyerProfileId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'lawyer_verification' } })
