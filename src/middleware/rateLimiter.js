@@ -1,4 +1,5 @@
 import rateLimit from 'express-rate-limit'
+import { mongoRateLimitStore } from '../utils/rateLimitMongoStore.js'
 
 /**
  * Strict limiter for auth endpoints — prevents brute-force and credential stuffing.
@@ -9,6 +10,7 @@ export const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  store: mongoRateLimitStore('auth', 15 * 60 * 1000),
   message: {
     status: 'error',
     message: 'Too many attempts from this IP. Please try again in 15 minutes.',
@@ -25,6 +27,7 @@ export const apiLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
+  store: mongoRateLimitStore('api', 60 * 1000),
   message: {
     status: 'error',
     message: 'Too many requests from this IP. Please slow down.',
@@ -40,6 +43,7 @@ export const uploadLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  store: mongoRateLimitStore('upload', 60 * 60 * 1000),
   message: {
     status: 'error',
     message: 'Upload limit reached. Please try again in an hour.',
