@@ -1,5 +1,6 @@
 import { env } from '../config/env.js'
 import { logger } from '../config/logger.js'
+import { reportServerError } from '../utils/errorReporting.js'
 
 export function errorHandler(error, request, response, _next) {
   const bodyTooLarge = error.type === 'entity.too.large'
@@ -17,6 +18,7 @@ export function errorHandler(error, request, response, _next) {
       stack: error.stack,
       code: error.code,
     })
+    void reportServerError(error, { requestId: request.requestId, method: request.method, path: request.path })
   }
 
   response.status(statusCode).json({

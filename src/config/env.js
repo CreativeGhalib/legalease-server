@@ -42,6 +42,7 @@ const envSchema = z.object({
   EMAIL_FROM: optionalEnvironmentValue(z.string().email()),
   SSCOMMERZ_STORE_ID: optionalEnvironmentValue(z.string().min(1)),
   SSCOMMERZ_STORE_PASSWORD: optionalEnvironmentValue(z.string().min(1)),
+  SENTRY_DSN: optionalEnvironmentValue(z.string().min(1)),
   SSCOMMERZ_SANDBOX: z.preprocess(
     (value) => (value === undefined ? undefined : value === 'true'),
     z.boolean().optional(),
