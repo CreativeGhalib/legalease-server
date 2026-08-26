@@ -3,6 +3,7 @@ import { env } from '../config/env.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { HiringRequest } from '../models/HiringRequest.js'
+import { User } from '../models/User.js'
 import {
   createHiringCheckout,
   createVerificationCheckout,
@@ -119,8 +120,20 @@ export async function listMyPayments(request, response, next) {
 
     const items = await PaymentTransaction.find(filter)
       .sort({ createdAt: -1, _id: -1 })
-      .select('type amountMinor currency status paidAt createdAt hiringRequestId')
+      .select('type amountMinor currency status paidAt createdAt hiringRequestId payerId lawyerId')
       .lean()
+
+    const partyIds = [...new Set(items.flatMap((item) => [String(item.payerId), String(item.lawyerId)]))]
+    const parties = partyIds.length
+      ? await User.find({ _id: { $in: partyIds } }).select('fullName').lean()
+      : []
+    const nameById = new Map(parties.map((party) => [String(party._id), party.fullName]))
+
+    const engagementIds = items.map((item) => item.hiringRequestId).filter(Boolean)
+    const engagements = engagementIds.length
+      ? await HiringRequest.find({ _id: { $in: engagementIds } }).select('specializationSnapshot').lean()
+      : []
+    const specializationByEngagement = new Map(engagements.map((doc) => [String(doc._id), doc.specializationSnapshot]))
 
     return response.json({
       success: true,
@@ -134,6 +147,10 @@ export async function listMyPayments(request, response, next) {
           paidAt: item.paidAt,
           createdAt: item.createdAt,
           hiringRequestId: item.hiringRequestId ? String(item.hiringRequestId) : null,
+          payerName: nameById.get(String(item.payerId)) ?? null,
+          lawyerName: nameById.get(String(item.lawyerId)) ?? null,
+          engagementSpecialization:
+            item.hiringRequestId ? specializationByEngagement.get(String(item.hiringRequestId)) ?? null : null,
         })),
       },
     })
