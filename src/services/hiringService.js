@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import { HiringRequest } from '../models/HiringRequest.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { User } from '../models/User.js'
+import { sendHireDecisionEmail, sendHireRequestEmail } from './emailService.js'
 
 function fail(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
 function safeRequest(request, viewer) {
@@ -21,6 +22,7 @@ export async function createHiringRequest(client, lawyerProfileId) {
   if (!lawyer) throw fail('This lawyer is not available for hire.', 404, 'LAWYER_NOT_HIREABLE')
   try {
     const request = await HiringRequest.create({ clientId: client.id, lawyerId: lawyer.id, lawyerProfileId: profile.id, specializationSnapshot: profile.specialization, feeMinorSnapshot: profile.consultationFeeMinor, currency: profile.currency, status: 'pending', paymentStatus: 'unpaid' })
+    await sendHireRequestEmail(lawyer, client, request)
     return safeRequest(await request.populate(clientPopulate), 'client')
   } catch (error) {
     if (error?.code === 11000) throw fail('You already have a hiring request with this lawyer.', 409, 'HIRING_REQUEST_ALREADY_EXISTS')
@@ -41,7 +43,10 @@ export async function getScopedRequest(id, user) {
 export async function decideHiringRequest(id, lawyer, decision) {
   if (!mongoose.isObjectIdOrHexString(id)) throw fail('Hiring request was not found.', 404, 'HIRING_REQUEST_NOT_FOUND')
   const request = await HiringRequest.findOneAndUpdate({ _id: id, lawyerId: lawyer.id, status: 'pending' }, { $set: { status: decision, decisionAt: new Date() } }, { returnDocument: 'after' }).populate(lawyerPopulate)
-  if (request) return safeRequest(request, 'lawyer')
+  if (request) {
+    await sendHireDecisionEmail(request.clientId, lawyer, decision)
+    return safeRequest(request, 'lawyer')
+  }
   const existing = await HiringRequest.findById(id).select('lawyerId status')
   if (!existing || String(existing.lawyerId) !== String(lawyer.id)) throw fail('Hiring request was not found.', 404, 'HIRING_REQUEST_NOT_FOUND')
   throw fail('Only a pending hiring request can be decided once.', 409, 'HIRING_REQUEST_ALREADY_DECIDED')

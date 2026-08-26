@@ -35,6 +35,11 @@ const envSchema = z.object({
   ADMIN_NAME: z.string().trim().min(2).optional(),
   ADMIN_EMAIL: z.string().trim().email().optional(),
   ADMIN_PASSWORD: z.string().min(12).optional(),
+  EMAIL_HOST: optionalEnvironmentValue(z.string().min(1)),
+  EMAIL_PORT: optionalEnvironmentValue(z.coerce.number().int().positive()),
+  EMAIL_USER: optionalEnvironmentValue(z.string().min(1)),
+  EMAIL_PASS: optionalEnvironmentValue(z.string().min(1)),
+  EMAIL_FROM: optionalEnvironmentValue(z.string().email()),
 })
 
 const result = envSchema.safeParse(process.env)

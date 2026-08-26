@@ -4,6 +4,7 @@ import { LawyerProfile } from '../models/LawyerProfile.js'
 import { HiringRequest } from '../models/HiringRequest.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { isProfileComplete } from '../services/paymentService.js'
+import { sendProfilePublishedEmail } from '../services/emailService.js'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -197,7 +198,7 @@ export async function moderateLawyer(req, res, next) {
       throw fail('Lawyer profile was not found.', 404, 'LAWYER_PROFILE_NOT_FOUND')
     }
 
-    const profile = await LawyerProfile.findById(req.params.id).populate('userId', 'role status')
+    const profile = await LawyerProfile.findById(req.params.id).populate('userId', 'fullName email role status')
     if (!profile?.userId) {
       throw fail('Lawyer profile was not found.', 404, 'LAWYER_PROFILE_NOT_FOUND')
     }
@@ -243,6 +244,9 @@ export async function moderateLawyer(req, res, next) {
     }
 
     await profile.save()
+    if (action === 'publish' && profile.userId?.email) {
+      await sendProfilePublishedEmail(profile.userId)
+    }
     res.json({ success: true, data: { publicationStatus: profile.publicationStatus } })
   } catch (error) {
     next(error)

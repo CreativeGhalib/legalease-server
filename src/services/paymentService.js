@@ -5,6 +5,7 @@ import { LawyerProfile } from '../models/LawyerProfile.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { HiringRequest } from '../models/HiringRequest.js'
 import { User } from '../models/User.js'
+import { sendPaymentConfirmationEmail } from './emailService.js'
 
 function error(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
 export function isProfileComplete(profile) { return Boolean(profile.professionalPhotoUrl && profile.specialization && profile.bio && profile.consultationFeeMinor > 0 && Number.isInteger(profile.experienceYears) && profile.experienceYears >= 0 && profile.licenseNumber) }
@@ -88,6 +89,10 @@ export async function fulfillVerificationSession(session) {
     { _id: profile.id, verificationStatus: { $ne: 'paid' } },
     { $set: { verificationStatus: 'paid', verificationPaidAt: paidTransaction.paidAt } },
   )
+  const verifyingLawyer = await User.findById(transaction.payerId).select('fullName email')
+  if (verifyingLawyer) {
+    await sendPaymentConfirmationEmail(verifyingLawyer, verifyingLawyer, transaction.amountMinor, transaction.currency)
+  }
 }
 
 export async function createHiringCheckout(user, requestId, { stripe: injectedStripe } = {}) {
@@ -128,6 +133,13 @@ export async function fulfillHiringSession(session) {
   await HiringRequest.findOneAndUpdate({ _id: request.id, status: 'accepted', paymentStatus: { $ne: 'paid' } }, { $set: { paymentStatus: 'paid', paidAt } }, { returnDocument: 'after' })
   const paidHireCount = await HiringRequest.countDocuments({ lawyerProfileId: request.lawyerProfileId, status: 'accepted', paymentStatus: 'paid' })
   await LawyerProfile.updateOne({ _id: request.lawyerProfileId }, { $max: { paidHireCount } })
+  const [hiringClient, hiringLawyer] = await Promise.all([
+    User.findById(request.clientId).select('fullName email'),
+    User.findById(request.lawyerId).select('fullName email'),
+  ])
+  if (hiringClient && hiringLawyer) {
+    await sendPaymentConfirmationEmail(hiringClient, hiringLawyer, request.feeMinorSnapshot, request.currency)
+  }
 }
 
 // Webhooks are the normal fulfillment path. This server-side reconciliation is
