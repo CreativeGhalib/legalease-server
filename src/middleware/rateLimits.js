@@ -24,6 +24,7 @@ export const authRateLimit = rateLimit({
 })
 
 export const checkoutRateLimit = mutationLimit('checkout', 12, 'CHECKOUT_RATE_LIMITED', 'Too many payment attempts. Please try again later.')
+export const intakeRateLimit = mutationLimit('intake', 10, 'INTAKE_RATE_LIMITED', 'Too many AI intake requests. Please try again in a few minutes.')
 export const ipnRateLimit = mutationLimit('sslcommerzIpn', 120, 'IPN_RATE_LIMITED', 'Too many gateway callbacks. Please retry shortly.')
 export const uploadRateLimit = mutationLimit('uploadMutation', 30, 'UPLOAD_RATE_LIMITED', 'Too many upload attempts. Please try again later.')
 export const adminMutationRateLimit = mutationLimit('adminMutation', 60, 'ADMIN_MUTATION_RATE_LIMITED', 'Too many administration changes. Please try again later.')
