@@ -3,6 +3,7 @@ import { HiringRequest } from '../models/HiringRequest.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { User } from '../models/User.js'
 import { Review } from '../models/Review.js'
+import { CaseMilestone } from '../models/CaseMilestone.js'
 import { logger } from '../config/logger.js'
 import { sendHireDecisionEmail, sendHireExpiredEmail, sendHireRequestEmail } from './emailService.js'
 import { createNotification } from './notificationService.js'
@@ -94,7 +95,17 @@ export async function listClientRequests(clientId) {
 }
 export async function listLawyerRequests(lawyerId) {
   await transitionExpiredRequests({ lawyerId })
-  return (await HiringRequest.find({ lawyerId }).sort({ createdAt: -1, _id: -1 }).populate(lawyerPopulate)).map((request) => safeRequest(request, 'lawyer'))
+  const requests = await HiringRequest.find({ lawyerId }).sort({ createdAt: -1, _id: -1 }).populate(lawyerPopulate)
+  const engagementIds = requests.map((request) => request._id)
+  const summaryRows = await CaseMilestone.aggregate([
+    { $match: { hiringRequestId: { $in: engagementIds } } },
+    { $group: { _id: '$hiringRequestId', total: { $sum: 1 }, completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } } } },
+  ])
+  const summaryById = new Map(summaryRows.map((row) => [String(row._id), { total: row.total, completed: row.completed }]))
+  return requests.map((request) => ({
+    ...safeRequest(request, 'lawyer'),
+    milestoneSummary: summaryById.get(String(request._id)) ?? { total: 0, completed: 0 },
+  }))
 }
 
 export async function getScopedRequest(id, user) {
