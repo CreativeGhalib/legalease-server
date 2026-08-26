@@ -13,6 +13,9 @@ import {
   roleSchema,
   statusSchema,
   tierSchema,
+  resolveDisputeSchema,
+  releaseOverrideSchema,
+  disputesQuerySchema,
 } from '../validators/adminValidators.js'
 import * as adminController from '../controllers/adminController.js'
 
@@ -61,6 +64,22 @@ adminRouter.delete(
   adminMutationRateLimit,
   verifyOrigin,
   adminController.deleteLawyer,
+)
+
+adminRouter.get('/disputes', validateQuery(disputesQuerySchema), adminController.listDisputes)
+adminRouter.patch(
+  '/disputes/:id/resolve',
+  adminMutationRateLimit,
+  verifyOrigin,
+  validate(resolveDisputeSchema),
+  adminController.resolveDispute,
+)
+adminRouter.post(
+  '/transactions/:id/release',
+  adminMutationRateLimit,
+  verifyOrigin,
+  validate(releaseOverrideSchema),
+  adminController.releaseEscrowOverride,
 )
 
 // ─── Transactions & Analytics ─────────────────────────────────────────────────

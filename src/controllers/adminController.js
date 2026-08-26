@@ -2,9 +2,11 @@ import mongoose from 'mongoose'
 import { User } from '../models/User.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { HiringRequest } from '../models/HiringRequest.js'
+import { Dispute } from '../models/Dispute.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { isProfileComplete, releaseEscrowDueFor } from '../services/paymentService.js'
 import { sendProfilePublishedEmail } from '../services/emailService.js'
+import { resolveDispute as resolveDisputeService, forceReleaseEscrow as forceReleaseEscrowService } from '../services/disputeService.js'
 import { logger } from '../config/logger.js'
 import { sendCsvResponse } from '../utils/csv.js'
 
@@ -376,6 +378,72 @@ export async function deleteLawyer(req, res, next) {
 }
 
 // ─── Transactions ─────────────────────────────────────────────────────────────
+
+// ─── Disputes ─────────────────────────────────────────────────────────────────
+
+export async function listDisputes(req, res, next) {
+  try {
+    const q = req.validatedQuery
+    const filter = {}
+    if (q.status) filter.status = q.status
+
+    const skip = (q.page - 1) * 10
+    const [items, totalItems] = await Promise.all([
+      Dispute.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(10)
+        .populate('openedById', 'fullName email')
+        .populate('hiringRequestId', 'specializationSnapshot feeMinorSnapshot currency'),
+      Dispute.countDocuments(filter),
+    ])
+
+    res.json({
+      success: true,
+      data: {
+        items: items.map((dispute) => ({
+          id: String(dispute._id),
+          status: dispute.status,
+          reason: dispute.reason,
+          openedBy: dispute.openedById
+            ? { fullName: dispute.openedById.fullName, email: dispute.openedById.email }
+            : null,
+          openedByRole: dispute.openedByRole,
+          engagement: dispute.hiringRequestId
+            ? {
+                id: String(dispute.hiringRequestId._id ?? dispute.hiringRequestId),
+                specializationSnapshot: dispute.hiringRequestId.specializationSnapshot,
+                feeMinorSnapshot: dispute.hiringRequestId.feeMinorSnapshot,
+              }
+            : null,
+          resolutionNote: dispute.resolutionNote || '',
+          createdAt: dispute.createdAt,
+        })),
+      },
+      meta: { page: q.page, pageSize: 10, totalItems, totalPages: Math.ceil(totalItems / 10) },
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function resolveDispute(req, res, next) {
+  try {
+    const closed = await resolveDisputeService(req.auth.user, req.params.id, req.body)
+    res.json({ success: true, data: { dispute: { id: String(closed._id), status: closed.status } } })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function releaseEscrowOverride(req, res, next) {
+  try {
+    const updated = await forceReleaseEscrowService(req.auth.user, req.params.id, req.body.note)
+    res.json({ success: true, data: { id: String(updated._id), escrowStatus: updated.escrowStatus } })
+  } catch (error) {
+    next(error)
+  }
+}
 
 export async function listTransactions(req, res, next) {
   try {

@@ -8,13 +8,14 @@ import { User } from '../models/User.js'
 import { sendPaymentConfirmationEmail } from './emailService.js'
 import { createNotification } from './notificationService.js'
 import { logger } from '../config/logger.js'
+import { Dispute } from '../models/Dispute.js'
 
 const ESCROW_AUTO_RELEASE_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * Lazy auto-release sweep — hiring_fee transactions whose confirmation window
  * (7 days) elapsed are marked released exactly once via conditional update.
- * Verification-type transactions never match (type filter is structural).
+ * Open disputes and verification-type transactions never match.
  */
 export async function releaseEscrowDueFor(filterBase = {}) {
   const cutoff = new Date(Date.now() - ESCROW_AUTO_RELEASE_MS)
@@ -25,11 +26,12 @@ export async function releaseEscrowDueFor(filterBase = {}) {
     escrowStatus: 'held',
     paidAt: { $ne: null, $lt: cutoff },
   })
-    .select('_id')
+    .select('_id hiringRequestId')
     .lean()
 
   let releasedCount = 0
   for (const doc of due) {
+    if (await Dispute.hasOpenDispute(doc.hiringRequestId)) continue
     const updated = await PaymentTransaction.findOneAndUpdate(
       { _id: doc._id, escrowStatus: 'held' },
       {

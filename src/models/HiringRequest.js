@@ -12,6 +12,7 @@ const hiringRequestSchema = new mongoose.Schema({
   decisionAt: { type: Date, default: null },
   paidAt: { type: Date, default: null },
   expiresAt: { type: Date, default: null },
+  disputeStatus: { type: String, enum: [null, 'opened', 'resolved'], default: null },
 }, { timestamps: true })
 
 hiringRequestSchema.index({ clientId: 1, lawyerProfileId: 1 }, { unique: true })

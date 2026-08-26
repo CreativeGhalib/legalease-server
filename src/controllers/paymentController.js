@@ -105,6 +105,14 @@ export async function confirmCaseCompletion(request, response, next) {
       })
     }
 
+    if (transaction.escrowStatus === 'disputed') {
+      throw fail('A dispute is open on this case — payment actions are paused.', 409, 'DISPUTE_OPEN')
+    }
+    if (await Dispute.hasOpenDispute(engagement._id)) {
+      await PaymentTransaction.updateOne({ _id: transaction._id, escrowStatus: 'held' }, { $set: { escrowStatus: 'disputed' } })
+      throw fail('A dispute is open on this case — payment actions are paused.', 409, 'DISPUTE_OPEN')
+    }
+
     if (transaction.paidAt && Date.now() - transaction.paidAt.getTime() < COMPLETION_CONFIRM_GRACE_MS) {
       throw fail('Funds can be released 24 hours after payment.', 409, 'CONFIRM_TOO_EARLY')
     }
