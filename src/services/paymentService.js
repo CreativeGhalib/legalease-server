@@ -9,6 +9,7 @@ import { sendPaymentConfirmationEmail } from './emailService.js'
 import { createNotification } from './notificationService.js'
 import { logger } from '../config/logger.js'
 import { Dispute } from '../models/Dispute.js'
+import { logAudit, AUDIT_ACTIONS } from './auditService.js'
 
 const ESCROW_AUTO_RELEASE_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -45,6 +46,13 @@ export async function releaseEscrowDueFor(filterBase = {}) {
     )
     if (!updated) continue
     releasedCount += 1
+    await logAudit({
+      action: AUDIT_ACTIONS.ESCROW_AUTO_7D,
+      actorRole: 'system',
+      targetType: 'PaymentTransaction',
+      targetId: String(doc._id),
+      meta: { hiringRequestId: String(updated.hiringRequestId ?? '') },
+    })
 
     try {
       const request = await HiringRequest.findById(updated.hiringRequestId)

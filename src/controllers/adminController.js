@@ -7,6 +7,7 @@ import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { isProfileComplete, releaseEscrowDueFor } from '../services/paymentService.js'
 import { sendProfilePublishedEmail } from '../services/emailService.js'
 import { resolveDispute as resolveDisputeService, forceReleaseEscrow as forceReleaseEscrowService, adminRefundTransaction } from '../services/disputeService.js'
+import { logAudit, AUDIT_ACTIONS } from '../services/auditService.js'
 import { logger } from '../config/logger.js'
 import { sendCsvResponse } from '../utils/csv.js'
 
@@ -161,11 +162,23 @@ export async function updateStatus(req, res, next) {
     const user = await requireUser(req.params.id)
     await protectLastAdmin(user, { status: req.body.status })
 
+    const wasActive = user.status === 'active'
     if (req.body.status === 'deactivated') {
       user.tokenVersion = (user.tokenVersion || 0) + 1
     }
     user.status = req.body.status
     await user.save()
+    if (req.body.status === 'deactivated') {
+      await logAudit({
+        actorId: req.auth.user.id,
+        actorRole: 'admin',
+        action: AUDIT_ACTIONS.USER_DEACTIVATE,
+        targetType: 'User',
+        targetId: String(user._id),
+        ip: req.ip,
+        meta: { email: user.email },
+      })
+    }
 
     res.json({ success: true, data: { user: safeUser(user) } })
   } catch (error) {
@@ -317,6 +330,15 @@ export async function moderateLawyer(req, res, next) {
     }
 
     await profile.save()
+    await logAudit({
+      actorId: req.auth.user.id,
+      actorRole: 'admin',
+      action: `listing.${action}`,
+      targetType: 'LawyerProfile',
+      targetId: String(profile._id),
+      ip: req.ip,
+      meta: { publicationStatus: profile.publicationStatus },
+    })
     if (action === 'publish' && profile.userId?.email) {
       await sendProfilePublishedEmail(profile.userId)
     }
@@ -346,6 +368,15 @@ export async function updateLawyerTier(req, res, next) {
         profileId: String(profile._id),
         from: previousTier,
         to: req.body.tier,
+      })
+      await logAudit({
+        actorId: req.auth.user.id,
+        actorRole: 'admin',
+        action: AUDIT_ACTIONS.TIER_CHANGE,
+        targetType: 'LawyerProfile',
+        targetId: String(profile._id),
+        ip: req.ip,
+        meta: { from: previousTier, to: req.body.tier },
       })
     }
 
@@ -378,6 +409,44 @@ export async function deleteLawyer(req, res, next) {
 }
 
 // ─── Transactions ─────────────────────────────────────────────────────────────
+
+export async function listAuditLogs(req, res, next) {
+  try {
+    const q = req.validatedQuery
+    const filter = {}
+    if (q.action) filter.action = q.action
+    if (q.actorId && mongoose.isObjectIdOrHexString(q.actorId)) filter.actorId = new mongoose.Types.ObjectId(q.actorId)
+
+    const skip = (q.page - 1) * q.limit
+    const [items, totalItems] = await Promise.all([
+      AuditLog.find(filter)
+        .populate('actorId', 'fullName email')
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(q.limit),
+      AuditLog.countDocuments(filter),
+    ])
+
+    res.json({
+      success: true,
+      data: {
+        items: items.map((entry) => ({
+          id: String(entry._id),
+          action: entry.action,
+          actor: entry.actorId ? { fullName: entry.actorId.fullName, email: entry.actorId.email } : null,
+          actorRole: entry.actorRole,
+          targetType: entry.targetType,
+          targetId: entry.targetId,
+          meta: entry.meta ?? {},
+          createdAt: entry.createdAt,
+        })),
+      },
+      meta: { page: q.page, pageSize: q.limit, totalItems, totalPages: Math.ceil(totalItems / q.limit) },
+    })
+  } catch (error) {
+    next(error)
+  }
+}
 
 // ─── Disputes ─────────────────────────────────────────────────────────────────
 

@@ -16,6 +16,7 @@ import {
   resolveDisputeSchema,
   releaseOverrideSchema,
   disputesQuerySchema,
+  auditQuerySchema,
 } from '../validators/adminValidators.js'
 import * as adminController from '../controllers/adminController.js'
 
@@ -67,6 +68,7 @@ adminRouter.delete(
 )
 
 adminRouter.get('/disputes', validateQuery(disputesQuerySchema), adminController.listDisputes)
+adminRouter.get('/audit-logs', validateQuery(auditQuerySchema), adminController.listAuditLogs)
 adminRouter.patch(
   '/disputes/:id/resolve',
   adminMutationRateLimit,

@@ -10,3 +10,10 @@ export const adminTransactionQuerySchema = z.object({ type: z.enum(['lawyer_veri
 export const resolveDisputeSchema = z.object({ outcome: z.enum(['refund', 'release']), note: z.string().trim().min(5, 'A resolution note of at least 5 characters is required.').max(600) }).strict()
 export const releaseOverrideSchema = z.object({ note: z.string().trim().min(5, 'A note of at least 5 characters is required.').max(600) }).strict()
 export const disputesQuerySchema = z.object({ page: z.coerce.number().int().min(1).default(1), status: z.enum(['open', 'resolved_refund', 'resolved_release']).optional() }).strict()
+
+export const auditQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  action: z.string().trim().max(60).optional(),
+  actorId: z.string().trim().optional(),
+}).strict()

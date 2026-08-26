@@ -18,6 +18,7 @@ import {
 import { handleSslcommerzIpn, initiateSslcommerzHiringCheckout } from '../services/sslcommerzService.js'
 import { resolveEngagementFor } from './caseTrackerController.js'
 import { createNotification } from '../services/notificationService.js'
+import { logAudit, AUDIT_ACTIONS } from '../services/auditService.js'
 
 const COMPLETION_CONFIRM_GRACE_MS = 24 * 60 * 60 * 1000
 
@@ -129,6 +130,16 @@ export async function confirmCaseCompletion(request, response, next) {
       { new: true },
     )
     if (!updated) throw fail('Escrow state changed, please refresh and try again.', 409, 'ESCROW_STATE_CHANGED')
+
+    await logAudit({
+      actorId: request.auth.user.id,
+      actorRole: request.auth.user.role === 'lawyer' ? 'lawyer' : 'user',
+      action: AUDIT_ACTIONS.ESCROW_CLIENT_CONFIRMED,
+      targetType: 'PaymentTransaction',
+      targetId: String(updated._id),
+      ip: request.ip,
+      meta: { hiringRequestId: String(engagement._id) },
+    })
 
     const lawyer = await User.findById(engagement.lawyerId).select('_id fullName')
     if (lawyer) {

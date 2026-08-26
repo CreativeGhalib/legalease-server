@@ -4,6 +4,7 @@ import { HiringRequest } from '../models/HiringRequest.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { User } from '../models/User.js'
 import { createNotification } from './notificationService.js'
+import { logAudit, AUDIT_ACTIONS } from './auditService.js'
 
 function fail(message, statusCode, code) {
   return Object.assign(new Error(message), { statusCode, code })
@@ -53,6 +54,14 @@ export async function openDispute(user, { hiringRequestId, reason }) {
     { $set: { escrowStatus: 'disputed' } },
   )
   await HiringRequest.updateOne({ _id: engagement._id }, { $set: { disputeStatus: 'opened' } })
+  await logAudit({
+    actorId: user.id,
+    actorRole: user.role === 'lawyer' ? 'lawyer' : 'user',
+    action: AUDIT_ACTIONS.DISPUTE_OPEN,
+    targetType: 'HiringRequest',
+    targetId: String(engagement._id),
+    meta: { reason },
+  })
 
   const counterpartId = isClient ? engagement.lawyerId : engagement.clientId
   await createNotification({
@@ -108,7 +117,15 @@ export async function resolveDispute(admin, disputeId, { outcome, note }) {
       { new: true },
     )
     if (!updated) throw fail('This dispute is already resolved.', 409, 'DISPUTE_ALREADY_RESOLVED')
-    await notifyParties(engagement, `Dispute resolved — refund issued`, `Admin refunded $${(transaction.amountMinor / 100).toFixed(2)} for the ${engagement.specializationSnapshot} engagement. Note: ${note}`)
+      await notifyParties(engagement, `Dispute resolved — refund issued`, `Admin refunded $${(transaction.amountMinor / 100).toFixed(2)} for the ${engagement.specializationSnapshot} engagement. Note: ${note}`)
+    await logAudit({
+      actorId: admin.id,
+      actorRole: 'admin',
+      action: AUDIT_ACTIONS.DISPUTE_RESOLVE_REFUND,
+      targetType: 'Dispute',
+      targetId: String(dispute._id),
+      meta: { hiringRequestId: String(engagement._id), note },
+    })
   } else {
     const updated = await PaymentTransaction.findOneAndUpdate(
       { _id: transaction._id, escrowStatus: { $in: ['held', 'disputed'] } },
@@ -122,7 +139,15 @@ export async function resolveDispute(admin, disputeId, { outcome, note }) {
       { new: true },
     )
     if (!updated) throw fail('This dispute is already resolved.', 409, 'DISPUTE_ALREADY_RESOLVED')
-    await notifyParties(engagement, 'Dispute resolved — funds released', `Admin reviewed the ${engagement.specializationSnapshot} dispute and released the funds to the lawyer. Note: ${note}`)
+      await notifyParties(engagement, 'Dispute resolved — funds released', `Admin reviewed the ${engagement.specializationSnapshot} dispute and released the funds to the lawyer. Note: ${note}`)
+    await logAudit({
+      actorId: admin.id,
+      actorRole: 'admin',
+      action: AUDIT_ACTIONS.DISPUTE_RESOLVE_RELEASE,
+      targetType: 'Dispute',
+      targetId: String(dispute._id),
+      meta: { hiringRequestId: String(engagement._id), note },
+    })
   }
 
   const closed = await Dispute.findOneAndUpdate(
@@ -197,6 +222,14 @@ export async function forceReleaseEscrow(admin, txnId, note) {
     const engagement = await HiringRequest.findById(updated.hiringRequestId)
     if (engagement) {
       await notifyParties(engagement, 'Escrow released by admin', `An administrator released the $${(updated.amountMinor / 100).toFixed(2)} escrow for the ${engagement.specializationSnapshot} engagement. Note: ${note}`)
+    await logAudit({
+      actorId: admin.id,
+      actorRole: 'admin',
+      action: AUDIT_ACTIONS.ESCROW_ADMIN,
+      targetType: 'PaymentTransaction',
+      targetId: String(updated._id),
+      meta: { note },
+    })
     }
   }
   return updated
