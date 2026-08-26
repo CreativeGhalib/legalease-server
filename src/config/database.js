@@ -1,6 +1,13 @@
 import mongoose from 'mongoose'
 import { env } from './env.js'
 
+export const connectionPoolOptions = {
+  maxPoolSize: 5,
+  serverSelectionTimeoutMS: 5000,
+  heartbeatFrequencyMS: 10000,
+  socketTimeoutMS: 45000,
+}
+
 let connectionPromise
 
 export async function connectDatabase() {
@@ -9,7 +16,10 @@ export async function connectDatabase() {
     return false
   }
 
-  await mongoose.connect(env.MONGODB_URI, { dbName: env.MONGODB_DB_NAME })
+  await mongoose.connect(env.MONGODB_URI, {
+    ...connectionPoolOptions,
+    dbName: env.MONGODB_DB_NAME,
+  })
   console.info('MongoDB connected.')
   return true
 }
