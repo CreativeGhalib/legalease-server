@@ -6,6 +6,7 @@ import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { isProfileComplete } from '../services/paymentService.js'
 import { sendProfilePublishedEmail } from '../services/emailService.js'
 import { logger } from '../config/logger.js'
+import { sendCsvResponse } from '../utils/csv.js'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,33 @@ export async function listUsers(req, res, next) {
   }
 }
 
+export async function exportUsersCsv(req, res, next) {
+  try {
+    const q = req.validatedQuery
+    const filter = {}
+    if (q.role) filter.role = q.role
+    if (q.status) filter.status = q.status
+    if (q.search) {
+      const escaped = q.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      filter.$or = [{ fullName: new RegExp(escaped, 'i') }, { email: new RegExp(escaped, 'i') }]
+    }
+
+    const users = await User.find(filter)
+      .select('fullName email role status profileImageUrl createdAt')
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(5000)
+      .lean()
+
+    const rows = users.map((user) => [
+      String(user._id), user.fullName, user.email, user.role, user.status,
+      user.createdAt ? user.createdAt.toISOString() : '',
+    ])
+    return sendCsvResponse(res, 'users', ['id', 'fullName', 'email', 'role', 'status', 'createdAt'], rows)
+  } catch (error) {
+    return next(error)
+  }
+}
+
 export async function updateRole(req, res, next) {
   try {
     const user = await requireUser(req.params.id)
@@ -192,6 +220,46 @@ export async function listLawyers(req, res, next) {
     })
   } catch (error) {
     next(error)
+  }
+}
+
+export async function exportLawyersCsv(req, res, next) {
+  try {
+    const q = req.validatedQuery
+    const filter = {}
+    if (q.publicationStatus) filter.publicationStatus = q.publicationStatus
+    if (q.verificationStatus) filter.verificationStatus = q.verificationStatus
+
+    const profiles = await LawyerProfile.find(filter)
+      .populate('userId', 'fullName email status')
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(5000)
+      .lean()
+
+    const rows = profiles.map((profile) => [
+      String(profile._id),
+      profile.userId?.fullName || '',
+      profile.userId?.email || '',
+      profile.userId?.status || 'deactivated',
+      profile.specialization,
+      profile.barAssociationBranch,
+      profile.tier,
+      profile.consultationFeeMinor,
+      profile.currency,
+      profile.availability,
+      profile.verificationStatus,
+      profile.publicationStatus,
+      profile.paidHireCount,
+      profile.createdAt ? new Date(profile.createdAt).toISOString() : '',
+    ])
+    return sendCsvResponse(
+      res,
+      'lawyers',
+      ['id', 'fullName', 'email', 'accountStatus', 'specialization', 'barAssociationBranch', 'tier', 'consultationFeeMinor', 'currency', 'availability', 'verificationStatus', 'publicationStatus', 'paidHireCount', 'createdAt'],
+      rows,
+    )
+  } catch (error) {
+    return next(error)
   }
 }
 
@@ -356,6 +424,43 @@ export async function listTransactions(req, res, next) {
     })
   } catch (error) {
     next(error)
+  }
+}
+
+export async function exportTransactionsCsv(req, res, next) {
+  try {
+    const q = req.validatedQuery
+    const filter = {}
+    if (q.type) filter.type = q.type
+    if (q.status) filter.status = q.status
+
+    const transactions = await PaymentTransaction.find(filter)
+      .populate('payerId', 'fullName')
+      .populate('lawyerId', 'fullName')
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(5000)
+      .lean()
+
+    const rows = transactions.map((transaction) => [
+      String(transaction._id),
+      transaction.type,
+      transaction.payerId?.fullName || '',
+      transaction.lawyerId?.fullName || '',
+      transaction.amountMinor,
+      transaction.currency,
+      transaction.status,
+      transaction.createdAt ? new Date(transaction.createdAt).toISOString() : '',
+      transaction.paidAt ? new Date(transaction.paidAt).toISOString() : '',
+      transaction.hiringRequestId ? String(transaction.hiringRequestId) : '',
+    ])
+    return sendCsvResponse(
+      res,
+      'transactions',
+      ['id', 'type', 'payerName', 'lawyerName', 'amountMinor', 'currency', 'status', 'createdAt', 'paidAt', 'hiringRequestId'],
+      rows,
+    )
+  } catch (error) {
+    return next(error)
   }
 }
 

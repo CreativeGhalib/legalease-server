@@ -22,6 +22,7 @@ const adminRouter = Router()
 adminRouter.use(authenticate, authorizeRoles('admin'))
 
 // ─── Users ───────────────────────────────────────────────────────────────────
+adminRouter.get('/users/export', validateQuery(adminQuerySchema), adminController.exportUsersCsv)
 adminRouter.get('/users', validateQuery(adminQuerySchema), adminController.listUsers)
 adminRouter.patch(
   '/users/:id/role',
@@ -39,6 +40,7 @@ adminRouter.patch(
 )
 
 // ─── Lawyers ─────────────────────────────────────────────────────────────────
+adminRouter.get('/lawyers/export', validateQuery(adminLawyerQuerySchema), adminController.exportLawyersCsv)
 adminRouter.get('/lawyers', validateQuery(adminLawyerQuerySchema), adminController.listLawyers)
 adminRouter.patch(
   '/lawyers/:id/publication',
@@ -62,6 +64,11 @@ adminRouter.delete(
 )
 
 // ─── Transactions & Analytics ─────────────────────────────────────────────────
+adminRouter.get(
+  '/transactions/export',
+  validateQuery(adminTransactionQuerySchema),
+  adminController.exportTransactionsCsv,
+)
 adminRouter.get(
   '/transactions',
   validateQuery(adminTransactionQuerySchema),
