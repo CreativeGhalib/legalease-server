@@ -4,7 +4,7 @@ import { User } from '../models/User.js'
 import { env } from '../config/env.js'
 import { logger } from '../config/logger.js'
 import { clearSessionCookie, createSessionToken, setSessionCookie, toSafeUser } from '../utils/auth.js'
-
+import { finalizeAccountDeletionIfDue } from '../utils/accountDeletion.js'
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000
 const LOGIN_FAILURE_LOCK_LIMIT = 5
 const LOGIN_LOCK_DURATION_MS = 30 * 60 * 1000
@@ -78,6 +78,8 @@ export async function login(request, response, next) {
       await user.save()
       throw invalidCredentialsError()
     }
+    const finalized = await finalizeAccountDeletionIfDue(user)
+    if (finalized) throw invalidCredentialsError()
     if (user.failedLoginAttempts > 0 || user.accountLockedUntil) {
       user.failedLoginAttempts = 0
       user.accountLockedUntil = null
@@ -90,8 +92,20 @@ export async function login(request, response, next) {
   }
 }
 
-export function getCurrentUser(request, response) {
-  return response.status(200).json({ success: true, data: { user: toSafeUser(request.auth.user) } })
+export async function getCurrentUser(request, response, next) {
+  try {
+    const finalized = await finalizeAccountDeletionIfDue(request.auth.user)
+    if (finalized) {
+      clearSessionCookie(response)
+      return response.status(401).json({
+        success: false,
+        error: { code: 'AUTHENTICATION_REQUIRED', message: 'This account has been deleted.' },
+      })
+    }
+    return response.status(200).json({ success: true, data: { user: toSafeUser(request.auth.user) } })
+  } catch (error) {
+    return next(error)
+  }
 }
 
 export function logout(_request, response) {

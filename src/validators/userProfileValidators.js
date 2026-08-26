@@ -12,3 +12,13 @@ export const userProfileUpdateSchema = z.object({
   fullName: z.string().trim().min(2, 'Full name must contain at least 2 characters.').max(120, 'Full name must be 120 characters or fewer.').optional(),
   profileImageUrl: accountPhotoUrl,
 }).strict().refine((value) => Object.keys(value).length > 0, 'Provide at least one profile field to update.')
+
+const credentialConfirmation = z.object({
+  password: z.string().min(1).optional(),
+  confirm: z.literal(true).optional(),
+}).strict().refine((value) => value.password || value.confirm, {
+  message: 'Confirm your identity with your password.',
+})
+
+export const deleteRequestSchema = credentialConfirmation
+export const revokeSessionsSchema = credentialConfirmation

@@ -44,5 +44,15 @@ export function readCookie(request, name) {
 }
 
 export function toSafeUser(user) {
-  return { id: user.id, fullName: user.fullName, email: user.email, profileImageUrl: user.profileImageUrl, role: user.role, status: user.status, createdAt: user.createdAt, updatedAt: user.updatedAt }
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    email: user.email,
+    profileImageUrl: user.profileImageUrl,
+    role: user.role,
+    status: user.status,
+    deletionRequestedAt: user.deletionRequestedAt ?? null,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  }
 }
