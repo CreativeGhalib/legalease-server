@@ -3,7 +3,7 @@ import { User } from '../models/User.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 import { HiringRequest } from '../models/HiringRequest.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
-import { isProfileComplete } from '../services/paymentService.js'
+import { isProfileComplete, releaseEscrowDueFor } from '../services/paymentService.js'
 import { sendProfilePublishedEmail } from '../services/emailService.js'
 import { logger } from '../config/logger.js'
 import { sendCsvResponse } from '../utils/csv.js'
@@ -379,6 +379,7 @@ export async function deleteLawyer(req, res, next) {
 
 export async function listTransactions(req, res, next) {
   try {
+    await releaseEscrowDueFor({})
     const q = req.validatedQuery
     const filter = {}
 

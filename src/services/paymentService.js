@@ -7,6 +7,74 @@ import { HiringRequest } from '../models/HiringRequest.js'
 import { User } from '../models/User.js'
 import { sendPaymentConfirmationEmail } from './emailService.js'
 import { createNotification } from './notificationService.js'
+import { logger } from '../config/logger.js'
+
+const ESCROW_AUTO_RELEASE_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Lazy auto-release sweep — hiring_fee transactions whose confirmation window
+ * (7 days) elapsed are marked released exactly once via conditional update.
+ * Verification-type transactions never match (type filter is structural).
+ */
+export async function releaseEscrowDueFor(filterBase = {}) {
+  const cutoff = new Date(Date.now() - ESCROW_AUTO_RELEASE_MS)
+  const due = await PaymentTransaction.find({
+    ...filterBase,
+    type: 'hiring_fee',
+    status: 'paid',
+    escrowStatus: 'held',
+    paidAt: { $ne: null, $lt: cutoff },
+  })
+    .select('_id')
+    .lean()
+
+  let releasedCount = 0
+  for (const doc of due) {
+    const updated = await PaymentTransaction.findOneAndUpdate(
+      { _id: doc._id, escrowStatus: 'held' },
+      {
+        $set: {
+          escrowStatus: 'released',
+          releaseReason: 'auto_7d',
+          releasedAt: new Date(),
+        },
+      },
+      { new: true },
+    )
+    if (!updated) continue
+    releasedCount += 1
+
+    try {
+      const request = await HiringRequest.findById(updated.hiringRequestId)
+      if (!request) continue
+      const [client, lawyerOfCase] = await Promise.all([
+        User.findById(request.clientId).select('fullName email'),
+        User.findById(request.lawyerId).select('fullName email'),
+      ])
+      if (client) {
+        await createNotification({
+          userId: client._id,
+          title: 'Escrow auto-released after 7 days',
+          message: `Your ${request.specializationSnapshot} engagement was auto-confirmed — funds marked released to ${lawyerOfCase?.fullName ?? 'the lawyer'}.`,
+          type: 'payment',
+          link: '/dashboard/user/hiring-history',
+        })
+      }
+      if (lawyerOfCase) {
+        await createNotification({
+          userId: lawyerOfCase._id,
+          title: 'Escrow funds auto-released',
+          message: `Client confirmation window passed for the ${request.specializationSnapshot} engagement ($${(updated.amountMinor / 100).toFixed(2)} USD).`,
+          type: 'payment',
+          link: '/dashboard/lawyer/hiring-history',
+        })
+      }
+    } catch (cause) {
+      logger.warn('Escrow release notification failed.', { error: cause.message, transactionId: String(doc._id) })
+    }
+  }
+  return releasedCount
+}
 
 function error(message, statusCode, code) { return Object.assign(new Error(message), { statusCode, code }) }
 export function isProfileComplete(profile) { return Boolean(profile.professionalPhotoUrl && profile.specialization && profile.bio && profile.consultationFeeMinor > 0 && Number.isInteger(profile.experienceYears) && profile.experienceYears >= 0 && profile.licenseNumber) }

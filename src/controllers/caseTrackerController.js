@@ -10,7 +10,7 @@ function isValidId(id) {
   return mongoose.isObjectIdOrHexString(id)
 }
 
-async function resolveEngagementFor(user, hiringRequestId) {
+export async function resolveEngagementFor(user, hiringRequestId) {
   if (!isValidId(hiringRequestId)) throw fail('Case was not found.', 404, 'CASE_NOT_FOUND')
   const engagement = await HiringRequest.findById(hiringRequestId)
   if (!engagement) throw fail('Case was not found.', 404, 'CASE_NOT_FOUND')

@@ -17,7 +17,10 @@ const paymentTransactionSchema = new mongoose.Schema({
   gateway: { type: String, enum: ['stripe', 'sslcommerz'], default: 'stripe' },
   gatewayTranId: { type: String, sparse: true, unique: true },
   gatewayValId: { type: String, sparse: true, unique: true },
-  escrowStatus: { type: String, enum: ['held'], default: null },
+  escrowStatus: { type: String, enum: ['held', 'released', 'disputed', 'refunded'], default: null },
+  releaseReason: { type: String, enum: ['client_confirmed', 'auto_7d', 'admin'], default: null },
+  releasedAt: { type: Date, default: null },
+  refundAmountMinor: { type: Number, min: 0, default: null },
   platformCommissionMinor: { type: Number, min: 0, default: null },
   lawyerPayoutMinor: { type: Number, min: 0, default: null },
 }, { timestamps: true })

@@ -12,9 +12,14 @@ import {
   fulfillVerificationSession,
   isProfileComplete,
   reconcilePendingPayment,
+  releaseEscrowDueFor,
   resetExpiredCheckout,
 } from '../services/paymentService.js'
 import { handleSslcommerzIpn, initiateSslcommerzHiringCheckout } from '../services/sslcommerzService.js'
+import { resolveEngagementFor } from './caseTrackerController.js'
+import { createNotification } from '../services/notificationService.js'
+
+const COMPLETION_CONFIRM_GRACE_MS = 24 * 60 * 60 * 1000
 
 function fail(message, statusCode, code) {
   return Object.assign(new Error(message), { statusCode, code })
@@ -75,6 +80,72 @@ export async function sslcommerzIpn(request, response, next) {
   }
 }
 
+// ─── Escrow Release ───────────────────────────────────────────────────────────
+
+export async function confirmCaseCompletion(request, response, next) {
+  try {
+    const { engagement } = await resolveEngagementFor(request.auth.user, request.params.hiringRequestId)
+
+    const transaction = await PaymentTransaction.findOne({
+      hiringRequestId: engagement._id,
+      type: 'hiring_fee',
+    })
+    if (!transaction || transaction.status !== 'paid') {
+      throw fail('Payment for this case was not found.', 404, 'CASE_NOT_FOUND')
+    }
+
+    if (transaction.escrowStatus === 'released') {
+      return response.json({
+        success: true,
+        data: {
+          escrowStatus: transaction.escrowStatus,
+          releaseReason: transaction.releaseReason,
+          releasedAt: transaction.releasedAt,
+        },
+      })
+    }
+
+    if (transaction.paidAt && Date.now() - transaction.paidAt.getTime() < COMPLETION_CONFIRM_GRACE_MS) {
+      throw fail('Funds can be released 24 hours after payment.', 409, 'CONFIRM_TOO_EARLY')
+    }
+
+    const updated = await PaymentTransaction.findOneAndUpdate(
+      { _id: transaction._id, escrowStatus: 'held' },
+      {
+        $set: {
+          escrowStatus: 'released',
+          releaseReason: 'client_confirmed',
+          releasedAt: new Date(),
+        },
+      },
+      { new: true },
+    )
+    if (!updated) throw fail('Escrow state changed, please refresh and try again.', 409, 'ESCROW_STATE_CHANGED')
+
+    const lawyer = await User.findById(engagement.lawyerId).select('_id fullName')
+    if (lawyer) {
+      await createNotification({
+        userId: lawyer._id,
+        title: `Funds released for ${engagement.specializationSnapshot} engagement`,
+        message: `${request.auth.user.fullName} confirmed completion — $${(updated.amountMinor / 100).toFixed(2)} marked released.`,
+        type: 'payment',
+        link: '/dashboard/lawyer/hiring-history',
+      })
+    }
+
+    return response.json({
+      success: true,
+      data: {
+        escrowStatus: updated.escrowStatus,
+        releaseReason: updated.releaseReason,
+        releasedAt: updated.releasedAt,
+      },
+    })
+  } catch (error) {
+    return next(error)
+  }
+}
+
 // ─── Payment Status ───────────────────────────────────────────────────────────
 
 export async function getPaymentStatus(request, response, next) {
@@ -129,6 +200,8 @@ export async function getPaymentStatus(request, response, next) {
         hiringPaidAt: hiringRequest?.paidAt,
         gateway: transaction.gateway ?? 'stripe',
         escrowStatus: transaction.escrowStatus ?? null,
+        releaseReason: transaction.releaseReason ?? null,
+        releasedAt: transaction.releasedAt ?? null,
       },
     })
   } catch (error) {
@@ -146,9 +219,12 @@ export async function listMyPayments(request, response, next) {
         ? { payerId: request.auth.user.id }
         : { lawyerId: request.auth.user.id }
 
+    // Lazy auto-release sweep scoped to the caller's slice of the ledger.
+    await releaseEscrowDueFor(filter)
+
     const items = await PaymentTransaction.find(filter)
       .sort({ createdAt: -1, _id: -1 })
-      .select('type amountMinor currency status paidAt createdAt hiringRequestId payerId lawyerId')
+      .select('type amountMinor currency status paidAt createdAt hiringRequestId payerId lawyerId escrowStatus releaseReason releasedAt')
       .lean()
 
     const partyIds = [...new Set(items.flatMap((item) => [String(item.payerId), String(item.lawyerId)]))]
@@ -175,6 +251,9 @@ export async function listMyPayments(request, response, next) {
           paidAt: item.paidAt,
           createdAt: item.createdAt,
           hiringRequestId: item.hiringRequestId ? String(item.hiringRequestId) : null,
+          escrowStatus: item.escrowStatus ?? null,
+          releaseReason: item.releaseReason ?? null,
+          releasedAt: item.releasedAt ?? null,
           payerName: nameById.get(String(item.payerId)) ?? null,
           lawyerName: nameById.get(String(item.lawyerId)) ?? null,
           engagementSpecialization:
