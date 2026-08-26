@@ -5,6 +5,7 @@ import { HiringRequest } from '../models/HiringRequest.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { isProfileComplete } from '../services/paymentService.js'
 import { sendProfilePublishedEmail } from '../services/emailService.js'
+import { logger } from '../config/logger.js'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -176,6 +177,8 @@ export async function listLawyers(req, res, next) {
           availability: profile.availability,
           verificationStatus: profile.verificationStatus,
           publicationStatus: profile.publicationStatus,
+          barAssociationBranch: profile.barAssociationBranch,
+          tier: profile.tier,
           paidHireCount: profile.paidHireCount,
           createdAt: profile.createdAt,
         })),
@@ -248,6 +251,35 @@ export async function moderateLawyer(req, res, next) {
       await sendProfilePublishedEmail(profile.userId)
     }
     res.json({ success: true, data: { publicationStatus: profile.publicationStatus } })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function updateLawyerTier(req, res, next) {
+  try {
+    if (!isValidId(req.params.id)) {
+      throw fail('Lawyer profile was not found.', 404, 'LAWYER_PROFILE_NOT_FOUND')
+    }
+
+    const profile = await LawyerProfile.findById(req.params.id)
+    if (!profile || profile.publicationStatus === 'deleted') {
+      throw fail('Lawyer profile was not found.', 404, 'LAWYER_PROFILE_NOT_FOUND')
+    }
+
+    const previousTier = profile.tier
+    if (previousTier !== req.body.tier) {
+      profile.tier = req.body.tier
+      await profile.save()
+      logger.info('Lawyer trust tier updated.', {
+        adminId: req.auth.user.id,
+        profileId: String(profile._id),
+        from: previousTier,
+        to: req.body.tier,
+      })
+    }
+
+    res.json({ success: true, data: { id: String(profile._id), tier: profile.tier } })
   } catch (error) {
     next(error)
   }

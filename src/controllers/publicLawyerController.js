@@ -36,9 +36,11 @@ export const publicLawyerProjection = {
   currency: 1,
   experienceYears: 1,
   licenseNumber: 1,
+  barAssociationBranch: 1,
   location: 1,
   languages: 1,
   availability: 1,
+  tier: 1,
   paidHireCount: 1,
   joinedAt: '$lawyerUser.createdAt',
 }

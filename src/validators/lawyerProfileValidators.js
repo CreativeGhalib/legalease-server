@@ -30,6 +30,7 @@ export const lawyerProfileSchema = z.object({
   consultationFeeMinor: consultationFee,
   experienceYears: z.coerce.number().int().min(0).max(80).optional(),
   licenseNumber: optionalText(120),
+  barAssociationBranch: optionalText(120),
   location: optionalText(160),
   languages: normalizedList(60, 'Languages'),
   availability: z.enum(['available', 'busy']).optional(),

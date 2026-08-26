@@ -12,6 +12,7 @@ import {
   publicationActionSchema,
   roleSchema,
   statusSchema,
+  tierSchema,
 } from '../validators/adminValidators.js'
 import * as adminController from '../controllers/adminController.js'
 
@@ -45,6 +46,13 @@ adminRouter.patch(
   verifyOrigin,
   validate(publicationActionSchema),
   adminController.moderateLawyer,
+)
+adminRouter.patch(
+  '/lawyers/:id/tier',
+  adminMutationRateLimit,
+  verifyOrigin,
+  validate(tierSchema),
+  adminController.updateLawyerTier,
 )
 adminRouter.delete(
   '/lawyers/:id',
