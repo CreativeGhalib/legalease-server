@@ -22,6 +22,35 @@ const consultationFee = z.union([
   z.number().finite().positive().max(999999),
 ]).transform((value) => Math.round(Number(value) * 100)).refine((value) => value > 0, 'Consultation fee must be greater than zero.').optional()
 
+const TIME_GRID = /^([01]\d|2[0-3]):(00|30)$/
+
+const workingHoursSchema = z.array(
+  z.object({
+    dayOfWeek: z.coerce.number().int().min(0).max(6),
+    slots: z.array(
+      z.object({
+        start: z.string().regex(TIME_GRID, 'Slot times must use HH:MM on the 30-minute grid.'),
+        end: z.string().regex(TIME_GRID, 'Slot times must use HH:MM on the 30-minute grid.'),
+      }).strict().refine((slot) => slot.start < slot.end, { message: 'Slot end must be after start.' }),
+    ).max(16, 'A day can hold at most 16 slots.'),
+  }).strict(),
+)
+  .max(7, 'Availability covers at most seven days.')
+  .optional()
+  .refine((days) => {
+    if (!days) return true
+    const seenDays = new Set()
+    for (const day of days) {
+      if (seenDays.has(day.dayOfWeek)) return false
+      seenDays.add(day.dayOfWeek)
+      const sorted = [...day.slots].sort((a, b) => a.start.localeCompare(b.start))
+      for (let index = 1; index < sorted.length; index += 1) {
+        if (sorted[index].start < sorted[index - 1].end) return false
+      }
+    }
+    return true
+  }, { message: 'Working hours cannot repeat a day or overlap slots within a day.' })
+
 export const lawyerProfileSchema = z.object({
   professionalPhotoUrl: hostedPhotoUrl,
   specialization: nonEmptyText(100, 'Specialization'),
@@ -34,4 +63,6 @@ export const lawyerProfileSchema = z.object({
   location: optionalText(160),
   languages: normalizedList(60, 'Languages'),
   availability: z.enum(['available', 'busy']).optional(),
+  workingHours: workingHoursSchema,
+  slotDurationMinutes: z.coerce.number().int().min(15).max(120).optional(),
 }).strict()

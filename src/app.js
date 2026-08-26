@@ -22,6 +22,7 @@ import reviewRouter from './routes/reviewRoutes.js'
 import publicRouter from './routes/publicRoutes.js'
 import notificationRouter from './routes/notificationRoutes.js'
 import caseRouter from './routes/caseRoutes.js'
+import appointmentRouter from './routes/appointmentRoutes.js'
 
 const app = express()
 
@@ -114,6 +115,7 @@ app.use('/api/reviews', reviewRouter)
 app.use('/api', publicRouter)
 app.use('/api/notifications', notificationRouter)
 app.use('/api/cases', caseRouter)
+app.use('/api/appointments', appointmentRouter)
 
 // ── Error handling ─────────────────────────────────────────────────────────────
 app.use(notFound)

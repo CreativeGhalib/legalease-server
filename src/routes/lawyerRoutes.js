@@ -8,7 +8,9 @@ import { lawyerProfileSchema } from '../validators/lawyerProfileValidators.js'
 import { validateQuery } from '../middleware/validateQuery.js'
 import { publicLawyerQuerySchema } from '../validators/publicLawyerValidators.js'
 import { getPublicLawyer, listFeaturedLawyers, listPublicLawyers, listTopLawyers } from '../controllers/publicLawyerController.js'
+import { getLawyerSlots } from '../controllers/appointmentController.js'
 import { updatePublication } from '../controllers/paymentController.js'
+import { slotsQuerySchema } from '../validators/appointmentValidators.js'
 import { z } from 'zod'
 
 const lawyerRouter = Router()
@@ -16,6 +18,7 @@ const lawyerRouter = Router()
 lawyerRouter.get('/', validateQuery(publicLawyerQuerySchema), listPublicLawyers)
 lawyerRouter.get('/featured', listFeaturedLawyers)
 lawyerRouter.get('/top', listTopLawyers)
+lawyerRouter.get('/:id/slots', validateQuery(slotsQuerySchema), getLawyerSlots)
 lawyerRouter.get('/:id', getPublicLawyer)
 
 lawyerRouter.use(authenticate, authorizeRoles('lawyer'))

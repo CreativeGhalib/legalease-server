@@ -16,6 +16,8 @@ function toProfileResponse(profile) {
     barAssociationBranch: profile.barAssociationBranch,
     location: profile.location,
     languages: profile.languages,
+    workingHours: profile.workingHours ?? [],
+    slotDurationMinutes: profile.slotDurationMinutes ?? 30,
     availability: profile.availability,
     tier: profile.tier,
     verificationStatus: profile.verificationStatus,

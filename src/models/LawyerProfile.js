@@ -13,6 +13,11 @@ const lawyerProfileSchema = new mongoose.Schema({
   barAssociationBranch: { type: String, trim: true, default: '', maxlength: 120 },
   location: { type: String, trim: true, default: '', maxlength: 160 },
   languages: { type: [String], default: [] },
+  workingHours: [{
+    dayOfWeek: { type: Number, min: 0, max: 6 },
+    slots: [{ start: { type: String }, end: { type: String } }],
+  }],
+  slotDurationMinutes: { type: Number, min: 15, max: 120, default: 30 },
   availability: { type: String, enum: ['available', 'busy'], default: 'available' },
   tier: { type: String, enum: ['bronze', 'silver', 'gold'], default: 'bronze' },
   averageRating: { type: Number, min: 0, max: 5, default: 0 },
