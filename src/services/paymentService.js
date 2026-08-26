@@ -9,6 +9,7 @@ import { sendPaymentConfirmationEmail } from './emailService.js'
 import { createNotification } from './notificationService.js'
 import { logger } from '../config/logger.js'
 import { Dispute } from '../models/Dispute.js'
+import { Appointment } from '../models/Appointment.js'
 import { logAudit, AUDIT_ACTIONS } from './auditService.js'
 
 const ESCROW_AUTO_RELEASE_MS = 7 * 24 * 60 * 60 * 1000
@@ -287,4 +288,62 @@ export async function resetExpiredCheckout(session) {
   if (!transaction || transaction.status === 'paid' || transaction.stripeCheckoutSessionId !== session.id) return
   if (transaction.type === 'lawyer_verification') await LawyerProfile.updateOne({ _id: transaction.lawyerProfileId, verificationStatus: 'checkout_created' }, { $set: { verificationStatus: 'unpaid' } })
   if (transaction.type === 'hiring_fee') await HiringRequest.updateOne({ _id: transaction.hiringRequestId, paymentStatus: 'checkout_created' }, { $set: { paymentStatus: 'unpaid' } })
+}
+
+// ─── Appointment fee checkout (Stripe parity) ────────────────────────────────
+
+export async function initiateAppointmentCheckoutStripe(user, appointmentId) {
+  const { acquireAppointmentTransaction } = await import('./appointmentPaymentService.js')
+  const { appointment, transaction } = await acquireAppointmentTransaction(user, appointmentId)
+
+  if (transaction.stripeCheckoutSessionId) {
+    const stripe = stripeClient()
+    const existing = await stripe.checkout.sessions.retrieve(transaction.stripeCheckoutSessionId)
+    if (existing.status === 'open' && existing.url) {
+      return { transactionId: transaction.id, checkoutUrl: existing.url }
+    }
+  }
+
+  const stripe = stripeClient()
+  const baseUrl = env.clientOrigins[0]
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    payment_method_types: ['card'],
+    line_items: [{
+      price_data: {
+        currency: 'usd',
+        product_data: { name: `LegalEase consultation — ${appointment.dateKey} ${appointment.start}` },
+        unit_amount: appointment.amountMinor,
+      },
+      quantity: 1,
+    }],
+    metadata: {
+      transactionId: transaction.id,
+      appointmentId: String(appointment._id),
+      type: 'appointment_fee',
+    },
+    success_url: `${baseUrl}/payment/appointment/success?transactionId=${transaction.id}`,
+    cancel_url: `${baseUrl}/payment/appointment/cancel?transactionId=${transaction.id}`,
+  })
+
+  await PaymentTransaction.updateOne(
+    { _id: transaction._id, status: 'pending' },
+    { $set: { stripeCheckoutSessionId: session.id, feeGateway: 'stripe' } },
+  )
+
+  return { transactionId: transaction.id, checkoutUrl: session.url }
+}
+
+export async function fulfillAppointmentSession(session) {
+  if (session.payment_status !== 'paid' || session.metadata?.type !== 'appointment_fee') return
+  const transaction = await PaymentTransaction.findById(session.metadata.transactionId)
+  if (
+    !transaction ||
+    transaction.type !== 'appointment_fee' ||
+    transaction.stripeCheckoutSessionId !== session.id ||
+    transaction.amountMinor !== session.amount_total
+  ) throw error('Payment session cannot be reconciled.', 400, 'INVALID_PAYMENT_SESSION')
+
+  const { finalizeAppointmentPayment } = await import('./appointmentPaymentService.js')
+  await finalizeAppointmentPayment(transaction)
 }

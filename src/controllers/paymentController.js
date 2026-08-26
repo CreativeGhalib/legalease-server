@@ -8,6 +8,7 @@ import { User } from '../models/User.js'
 import {
   createHiringCheckout,
   createVerificationCheckout,
+  fulfillAppointmentSession,
   fulfillHiringSession,
   fulfillVerificationSession,
   isProfileComplete,
@@ -305,6 +306,8 @@ export async function stripeWebhook(request, response, next) {
     if (event.type === 'checkout.session.completed') {
       if (event.data.object.metadata?.type === 'hiring_fee') {
         await fulfillHiringSession(event.data.object)
+      } else if (event.data.object.metadata?.type === 'appointment_fee') {
+        await fulfillAppointmentSession(event.data.object)
       } else {
         await fulfillVerificationSession(event.data.object)
       }

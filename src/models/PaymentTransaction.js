@@ -1,11 +1,12 @@
 import mongoose from 'mongoose'
 
 const paymentTransactionSchema = new mongoose.Schema({
-  type: { type: String, enum: ['lawyer_verification', 'hiring_fee'], required: true },
+  type: { type: String, enum: ['lawyer_verification', 'hiring_fee', 'appointment_fee'], required: true },
   payerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   lawyerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   lawyerProfileId: { type: mongoose.Schema.Types.ObjectId, ref: 'LawyerProfile', required: true },
   hiringRequestId: { type: mongoose.Schema.Types.ObjectId, default: null },
+  appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Appointment', default: null },
   stripeCheckoutSessionId: { type: String, sparse: true, unique: true },
   stripePaymentIntentId: { type: String, sparse: true, unique: true },
   checkoutAttempt: { type: Number, default: 0, min: 0 },
@@ -27,6 +28,7 @@ const paymentTransactionSchema = new mongoose.Schema({
 
 paymentTransactionSchema.index({ lawyerProfileId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'lawyer_verification' } })
 paymentTransactionSchema.index({ hiringRequestId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'hiring_fee' } })
+paymentTransactionSchema.index({ appointmentId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'appointment_fee' } })
 
 // stripeCheckoutSessionId and stripePaymentIntentId uniqueness defined inline above
 paymentTransactionSchema.index({ payerId: 1, createdAt: -1, _id: -1 })  // user transaction history

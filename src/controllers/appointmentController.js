@@ -4,6 +4,9 @@ import { LawyerProfile } from '../models/LawyerProfile.js'
 import { User } from '../models/User.js'
 import { createNotification } from '../services/notificationService.js'
 import { dhakaTodayKey, endLabelFor, generateDaySlots } from '../utils/slots.js'
+import { cancelUnpaidAppointmentHolds } from '../services/appointmentPaymentService.js'
+import { initiateSslcommerzAppointmentCheckout } from '../services/sslcommerzService.js'
+import { initiateAppointmentCheckoutStripe } from '../services/paymentService.js'
 
 function fail(message, statusCode, code) {
   return Object.assign(new Error(message), { statusCode, code })
@@ -30,6 +33,7 @@ export async function getLawyerSlots(request, response, next) {
     const profile = await resolveBookableProfile(request.params.id)
     const { dateKey } = request.validatedQuery
 
+      await cancelUnpaidAppointmentHolds({ lawyerProfileId: profile._id })
     const booked = await Appointment.find({ lawyerProfileId: profile._id, dateKey, status: 'scheduled' }).select('start').lean()
     const bookedStarts = new Set(booked.map((doc) => doc.start))
 
@@ -93,12 +97,15 @@ export async function createAppointment(request, response, next) {
     })
     if (!openSlots.includes(request.body.start)) throw fail('That slot is no longer available.', 409, 'SLOT_UNAVAILABLE')
 
+    const amountMinor = profile.consultationFeeMinor ?? 0
     const appointment = await Appointment.create({
       lawyerProfileId: profile._id,
       userId: request.auth.user.id,
       dateKey: request.body.dateKey,
       start: request.body.start,
       end: endLabelFor(request.body.start, profile.slotDurationMinutes ?? 30),
+      paymentStatus: amountMinor > 0 ? 'unpaid' : 'paid',
+      amountMinor,
     })
 
     await createNotification({
@@ -119,6 +126,7 @@ export async function createAppointment(request, response, next) {
 
 export async function listMyAppointments(request, response, next) {
   try {
+    await cancelUnpaidAppointmentHolds({ userId: request.auth.user.id })
     const items = await Appointment.find({ userId: request.auth.user.id })
       .sort({ dateKey: -1, start: -1 })
       .populate({ path: 'lawyerProfileId', select: 'userId specialization', populate: { path: 'userId', select: 'fullName' } })
@@ -132,6 +140,9 @@ export async function listMyAppointments(request, response, next) {
           end: appointment.end,
           status: appointment.status,
           meetingLink: appointment.meetingLink,
+          paymentStatus: appointment.paymentStatus,
+          amountMinor: appointment.amountMinor,
+          feeGateway: appointment.feeGateway ?? null,
           specialization: appointment.lawyerProfileId?.specialization ?? '',
           counterpartName: appointment.lawyerProfileId?.userId?.fullName ?? 'LegalEase lawyer',
         })),
@@ -146,6 +157,7 @@ export async function listLawyerAppointments(request, response, next) {
   try {
     const profile = await LawyerProfile.findOne({ userId: request.auth.user.id }).select('_id')
     if (!profile) return response.json({ success: true, data: { items: [] } })
+    await cancelUnpaidAppointmentHolds({ lawyerProfileId: profile._id })
 
     const items = await Appointment.find({ lawyerProfileId: profile._id })
       .sort({ dateKey: -1, start: -1 })
@@ -160,10 +172,31 @@ export async function listLawyerAppointments(request, response, next) {
           end: appointment.end,
           status: appointment.status,
           meetingLink: appointment.meetingLink,
+          paymentStatus: appointment.paymentStatus,
+          amountMinor: appointment.amountMinor,
+          feeGateway: appointment.feeGateway ?? null,
           counterpartName: appointment.userId?.fullName ?? 'LegalEase client',
         })),
       },
     })
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export async function startAppointmentCheckoutSslcommerz(request, response, next) {
+  try {
+    const data = await initiateSslcommerzAppointmentCheckout(request.auth.user, request.params.id)
+    return response.status(201).json({ success: true, data })
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export async function startAppointmentCheckoutStripe(request, response, next) {
+  try {
+    const data = await initiateAppointmentCheckoutStripe(request.auth.user, request.params.id)
+    return response.status(201).json({ success: true, data })
   } catch (error) {
     return next(error)
   }

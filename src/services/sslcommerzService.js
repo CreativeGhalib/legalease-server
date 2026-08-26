@@ -5,6 +5,7 @@ import { LawyerProfile } from '../models/LawyerProfile.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { User } from '../models/User.js'
 import { finalizeVerifiedHiringPayment } from './paymentService.js'
+import { acquireAppointmentTransaction, finalizeAppointmentPayment } from './appointmentPaymentService.js'
 
 function fail(message, statusCode, code) {
   return Object.assign(new Error(message), { statusCode, code })
@@ -149,7 +150,11 @@ export async function handleSslcommerzIpn(ipnPayload) {
   }
 
   const transaction = await PaymentTransaction.findOne({ gatewayTranId: tranId })
-  if (!transaction || transaction.type !== 'hiring_fee' || transaction.gateway !== 'sslcommerz') {
+  if (
+    !transaction ||
+    !['hiring_fee', 'appointment_fee'].includes(transaction.type) ||
+    transaction.gateway !== 'sslcommerz'
+  ) {
     throw fail('IPN does not match a pending LegalEase payment.', 400, 'INVALID_IPN')
   }
 
@@ -164,7 +169,13 @@ export async function handleSslcommerzIpn(ipnPayload) {
 
   if (transaction.status === 'paid') return { alreadyPaid: true }
 
-  const hiringRequest = await HiringRequest.findById(transaction.hiringRequestId)
+  if (transaction.type === 'appointment_fee') {
+    await finalizeAppointmentPayment(transaction)
+    await PaymentTransaction.updateOne({ _id: transaction._id }, { $set: { gatewayValId: valId } })
+    return { fulfilled: true, transactionId: String(transaction._id) }
+  }
+
+  const hiringRequest = await HiringRequest.findOne({ hiringRequestId: transaction.hiringRequestId })
   if (!hiringRequest || hiringRequest.paymentStatus === 'paid') {
     throw fail('IPN does not match the stored obligation.', 400, 'INVALID_IPN')
   }
@@ -177,4 +188,63 @@ export async function handleSslcommerzIpn(ipnPayload) {
   })
 
   return { fulfilled: true, transactionId: String(transaction._id) }
+}
+
+export async function initiateSslcommerzAppointmentCheckout(user, appointmentId) {
+  if (!isConfigured()) throw fail('Local payments are not configured yet.', 503, 'SSLCOMMERZ_UNAVAILABLE')
+
+  const { acquireAppointmentTransaction } = await import('./appointmentPaymentService.js')
+  const { appointment, transaction } = await acquireAppointmentTransaction(user, appointmentId)
+
+  const tranId = `LE-A-${crypto.randomBytes(8).toString('hex').toUpperCase()}`
+  const payload = new URLSearchParams({
+    store_id: env.SSCOMMERZ_STORE_ID,
+    store_passwd: env.SSCOMMERZ_STORE_PASSWORD,
+    total_amount: (appointment.amountMinor / 100).toFixed(2),
+    currency: 'BDT',
+    tran_id: tranId,
+    success_url: `${clientBase()}/payment/appointment/success?txn=${transaction.id}`,
+    fail_url: `${clientBase()}/payment/appointment/fail?txn=${transaction.id}`,
+    cancel_url: `${clientBase()}/payment/appointment/cancel?txn=${transaction.id}`,
+    ipn_url: `${clientBase()}/api/payments/sslcommerz/ipn`,
+    cus_name: payerName(user),
+    cus_email: user.email,
+    cus_add1: 'Dhaka',
+    cus_city: 'Dhaka',
+    cus_country: 'Bangladesh',
+    cus_phone: 'N/A',
+    shipping_method: 'NO',
+    num_of_item: 1,
+    product_name: `LegalEase consultation — ${appointment.dateKey} ${appointment.start}`,
+    product_category: 'Legal Services',
+    product_profile: 'non-physical-goods',
+  })
+
+  let gatewayResponse
+  try {
+    const apiResponse = await fetch(`${baseUrl()}/gwprocess/v4/api.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payload.toString(),
+      signal: AbortSignal.timeout(20_000),
+    })
+    gatewayResponse = await apiResponse.json().catch(() => null)
+  } catch (cause) {
+    throw fail('The local payment gateway could not be reached. Please try again shortly.', 502, 'GATEWAY_UNAVAILABLE')
+  }
+
+  if (!gatewayResponse?.GatewayPageURL) {
+    throw fail('The local payment gateway rejected this session. Please try again shortly.', 502, 'GATEWAY_SESSION_FAILED')
+  }
+
+  await PaymentTransaction.updateOne(
+    { _id: transaction._id, status: 'pending' },
+    { $set: { gateway: 'sslcommerz', gatewayTranId: tranId, feeGateway: 'sslcommerz' } },
+  )
+
+  return { transactionId: transaction.id, redirectUrl: gatewayResponse.GatewayPageURL }
+}
+
+function payerLabel(user) {
+  return user.fullName || 'LegalEase client'
 }

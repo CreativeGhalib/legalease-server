@@ -8,6 +8,9 @@ const appointmentSchema = new mongoose.Schema({
   end: { type: String, required: true, match: /^([01]\d|2[0-3]):(00|30)$/ },
   status: { type: String, enum: ['scheduled', 'completed', 'cancelled'], default: 'scheduled' },
   meetingLink: { type: String, trim: true, default: '' },
+  paymentStatus: { type: String, enum: ['unpaid', 'paid'], default: 'unpaid' },
+  amountMinor: { type: Number, min: 0, default: null },
+  feeGateway: { type: String, enum: ['stripe', 'sslcommerz'], default: null },
 }, { timestamps: true })
 
 // Race-proof double-booking guard: one *active* appointment per lawyer/date/start.
