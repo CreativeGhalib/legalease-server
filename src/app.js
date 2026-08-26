@@ -25,6 +25,7 @@ import caseRouter from './routes/caseRoutes.js'
 import appointmentRouter from './routes/appointmentRoutes.js'
 import intakeRouter from './routes/intakeRoutes.js'
 import disputeRouter from './routes/disputeRoutes.js'
+import seoRouter from './routes/seoRoutes.js'
 
 const app = express()
 
@@ -115,6 +116,9 @@ app.use('/api/uploads', uploadRouter)
 app.use('/api/payments', paymentRouter)
 app.use('/api/reviews', reviewRouter)
 app.use('/api', publicRouter)
+// ── Search engine endpoints (root-level, public) ─────────────────────────────
+app.use('/', seoRouter)
+
 app.use('/api/notifications', notificationRouter)
 app.use('/api/cases', caseRouter)
 app.use('/api/appointments', appointmentRouter)
