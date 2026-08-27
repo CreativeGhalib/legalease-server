@@ -41,7 +41,7 @@ export class RateLimitMongoStore {
     try {
       await this.init()
       const collection = this.collection()
-      if (!collection) return { totalHits: 0 }
+      if (!collection) return { totalHits: 1 }
 
       const now = new Date()
       const live = await collection.findOneAndUpdate(
@@ -72,7 +72,7 @@ export class RateLimitMongoStore {
       }
     } catch (error) {
       logger.error('Rate limit store increment failed; allowing request.', { error: error.message, prefix: this.prefix })
-      return { totalHits: 0 }
+      return { totalHits: 1 }
     }
   }
 

@@ -3,12 +3,16 @@ import { changePassword, forgotPassword, getCurrentUser, login, logout, register
 import { completeGoogleOnboarding, googleAuthenticate } from '../controllers/googleAuthController.js'
 import { authenticate } from '../middleware/authenticate.js'
 import { authRateLimit } from '../middleware/rateLimits.js'
+import { sendPhoneOtp, verifyPhoneOtp } from '../controllers/phoneVerificationController.js'
 import { validate } from '../middleware/validate.js'
 import { verifyOrigin } from '../middleware/verifyOrigin.js'
-import { changePasswordSchema, forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema } from '../validators/authValidators.js'
+import { changePasswordSchema, forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema, sendPhoneOtpSchema, verifyPhoneOtpSchema } from '../validators/authValidators.js'
 import { googleCredentialSchema, googleOnboardingSchema } from '../validators/googleAuthValidators.js'
 
 const authRouter = Router()
+
+authRouter.post('/phone/send-otp', authRateLimit, authenticate, verifyOrigin, validate(sendPhoneOtpSchema), sendPhoneOtp)
+authRouter.post('/phone/verify-otp', authRateLimit, authenticate, verifyOrigin, validate(verifyPhoneOtpSchema), verifyPhoneOtp)
 
 authRouter.post('/register', authRateLimit, verifyOrigin, validate(registerSchema), register)
 authRouter.post('/login', authRateLimit, verifyOrigin, validate(loginSchema), login)

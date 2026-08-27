@@ -51,6 +51,8 @@ export function toSafeUser(user) {
     profileImageUrl: user.profileImageUrl,
     role: user.role,
     status: user.status,
+    phone: user.phone ?? null,
+    phoneVerified: Boolean(user.phoneVerified),
     deletionRequestedAt: user.deletionRequestedAt ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

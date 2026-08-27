@@ -5,6 +5,7 @@ import { LawyerProfile } from '../models/LawyerProfile.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { HiringRequest } from '../models/HiringRequest.js'
 import { User } from '../models/User.js'
+import { Dispute } from '../models/Dispute.js'
 import {
   createHiringCheckout,
   createVerificationCheckout,

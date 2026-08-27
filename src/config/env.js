@@ -43,6 +43,9 @@ const envSchema = z.object({
   SSCOMMERZ_STORE_ID: optionalEnvironmentValue(z.string().min(1)),
   SSCOMMERZ_STORE_PASSWORD: optionalEnvironmentValue(z.string().min(1)),
   SENTRY_DSN: optionalEnvironmentValue(z.string().min(1)),
+  VONAGE_API_KEY: optionalEnvironmentValue(z.string().min(1)),
+  VONAGE_API_SECRET: optionalEnvironmentValue(z.string().min(1)),
+  VONAGE_FROM_NUMBER: optionalEnvironmentValue(z.string().min(1)),
   SSCOMMERZ_SANDBOX: z.preprocess(
     (value) => (value === undefined ? undefined : value === 'true'),
     z.boolean().optional(),

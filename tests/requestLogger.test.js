@@ -39,7 +39,7 @@ test('requestLogger honors a well-formed inbound X-Request-ID and rejects hostil
 
 test('every API response carries a correlated X-Request-ID header and error body field', async () => {
   const healthy = await request(app).get('/api/health')
-  assert.equal(healthy.status, 200)
+  assert.equal(healthy.status, 503)
   const healthyId = healthy.headers['x-request-id']
   assert.match(healthyId, UUID_PATTERN)
 
@@ -51,4 +51,27 @@ test('every API response carries a correlated X-Request-ID header and error body
   assert.equal(missing.body.success, false)
   assert.equal(missing.body.requestId, missing.headers['x-request-id'])
   assert.match(missing.body.requestId, UUID_PATTERN)
+})
+
+test('health endpoints expose the same detailed readiness contract on legacy and v1 paths', async () => {
+  const legacy = await request(app).get('/api/health')
+  const versioned = await request(app).get('/api/v1/health')
+
+  assert.equal(versioned.status, legacy.status)
+  assert.equal(versioned.body.data.status, 'degraded')
+  assert.equal(versioned.body.data.database.connected, false)
+  assert.equal(versioned.body.data.database.state, 'disconnected')
+  assert.equal(typeof versioned.body.data.database.latencyMs, 'number')
+  assert.equal(typeof versioned.body.data.uptime, 'number')
+  assert.equal(typeof versioned.body.data.memory.rss, 'number')
+  assert.match(versioned.body.data.timestamp, /^\d{4}-\d{2}-\d{2}T/)
+})
+
+test('v1 aliases preserve authentication behavior without removing legacy routes', async () => {
+  const legacy = await request(app).get('/api/auth/me')
+  const versioned = await request(app).get('/api/v1/auth/me')
+
+  assert.equal(legacy.status, 401)
+  assert.equal(versioned.status, 401)
+  assert.equal(versioned.body.error.code, legacy.body.error.code)
 })
