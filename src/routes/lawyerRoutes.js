@@ -16,20 +16,19 @@ import { z } from 'zod'
 
 const lawyerRouter = Router()
 
+// Authenticated lawyer profile and management routes (MUST come before /:id)
+lawyerRouter.get('/me/profile', authenticate, authorizeRoles('lawyer'), getMyLawyerProfile)
+lawyerRouter.post('/me/profile', authenticate, authorizeRoles('lawyer'), verifyOrigin, validate(lawyerProfileSchema), createMyLawyerProfile)
+lawyerRouter.patch('/me/profile', authenticate, authorizeRoles('lawyer'), verifyOrigin, validate(lawyerProfileSchema), updateMyLawyerProfile)
+lawyerRouter.delete('/me/profile', authenticate, authorizeRoles('lawyer'), verifyOrigin, deleteMyLawyerProfile)
+lawyerRouter.patch('/me/publication', authenticate, authorizeRoles('lawyer'), verifyOrigin, validate(z.object({ publicationStatus: z.enum(['published', 'unpublished']) }).strict()), updatePublication)
+lawyerRouter.get('/me/analytics', authenticate, authorizeRoles('lawyer'), getLawyerAnalytics)
+
+// Public lawyer routes
 lawyerRouter.get('/', validateQuery(publicLawyerQuerySchema), listPublicLawyers)
 lawyerRouter.get('/featured', listFeaturedLawyers)
 lawyerRouter.get('/top', listTopLawyers)
 lawyerRouter.get('/:id/slots', validateQuery(slotsQuerySchema), getLawyerSlots)
 lawyerRouter.get('/:id', getPublicLawyer)
-
-lawyerRouter.use(authenticate, authorizeRoles('lawyer'))
-lawyerRouter.get('/me/profile', getMyLawyerProfile)
-lawyerRouter.post('/me/profile', verifyOrigin, validate(lawyerProfileSchema), createMyLawyerProfile)
-lawyerRouter.patch('/me/profile', verifyOrigin, validate(lawyerProfileSchema), updateMyLawyerProfile)
-lawyerRouter.delete('/me/profile', verifyOrigin, deleteMyLawyerProfile)
-lawyerRouter.patch('/me/publication', verifyOrigin, validate(z.object({ publicationStatus: z.enum(['published', 'unpublished']) }).strict()), updatePublication)
-
-// Lawyer analytics dashboard (11-D)
-lawyerRouter.get('/me/analytics', getLawyerAnalytics)
 
 export default lawyerRouter
