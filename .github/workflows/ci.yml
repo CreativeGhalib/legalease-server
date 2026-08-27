@@ -90,3 +90,15 @@ jobs:
           ADMIN_NAME: ${{ secrets.ADMIN_NAME }}
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          SSCOMMERZ_STORE_ID: ${{ secrets.SSCOMMERZ_STORE_ID }}
+          SSCOMMERZ_STORE_PASSWORD: ${{ secrets.SSCOMMERZ_STORE_PASSWORD }}
+          SSCOMMERZ_SANDBOX: ${{ secrets.SSCOMMERZ_SANDBOX }}
+          VONAGE_API_KEY: ${{ secrets.VONAGE_API_KEY }}
+          VONAGE_API_SECRET: ${{ secrets.VONAGE_API_SECRET }}
+          VONAGE_FROM_NUMBER: ${{ secrets.VONAGE_FROM_NUMBER }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
