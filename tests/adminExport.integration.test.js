@@ -14,18 +14,20 @@ test('admin CSV exports stream dated attachments with injection-safe rows', { sk
   process.env.JWT_SECRET = randomBytes(48).toString('hex')
   process.env.CLIENT_ORIGINS = origin
 
-  const [{ default: request }, mongoose, bcrypt, { default: app }, { User }, { LawyerProfile }] = await Promise.all([
+  const [{ default: request }, mongoose, bcrypt, { default: app }, { User }, { LawyerProfile }, { PaymentTransaction }] = await Promise.all([
     import('supertest'),
     import('mongoose'),
     import('bcrypt'),
     import('../src/app.js'),
     import('../src/models/User.js'),
     import('../src/models/LawyerProfile.js'),
+    import('../src/models/PaymentTransaction.js'),
   ])
 
   await mongoose.connect(testUri, { dbName: testDatabase })
   await User.init()
   await LawyerProfile.init()
+  await PaymentTransaction.init()
 
   const suffix = randomBytes(6).toString('hex')
   const emails = [`export-admin.${suffix}@legalease.test`, `=formula-lawyer.${suffix}@legalease.test`, `export-client.${suffix}@legalease.test`]
@@ -35,6 +37,7 @@ test('admin CSV exports stream dated attachments with injection-safe rows', { sk
   context.after(async () => {
     await User.deleteMany({ email: { $in: emails } })
     await LawyerProfile.deleteMany({})
+    await PaymentTransaction.deleteMany({})
     await mongoose.disconnect()
   })
 
@@ -43,7 +46,7 @@ test('admin CSV exports stream dated attachments with injection-safe rows', { sk
   ))
   const client = await User.create({ fullName: 'Export Client', email: emails[2], passwordHash, role: 'user', providers: ['local'] })
 
-  await LawyerProfile.create({
+  const profile = await LawyerProfile.create({
     userId: formulaLawyer.id,
     professionalPhotoUrl: 'https://i.ibb.co/export-portrait.png',
     specialization: 'Tax Law',
@@ -54,6 +57,11 @@ test('admin CSV exports stream dated attachments with injection-safe rows', { sk
     verificationStatus: 'paid',
     publicationStatus: 'published',
     tier: 'silver',
+  })
+  await PaymentTransaction.create({
+    type: 'lawyer_verification', payerId: formulaLawyer.id, lawyerId: formulaLawyer.id,
+    lawyerProfileId: profile.id, stripeCheckoutSessionId: `cs_export_${suffix}`,
+    amountMinor: 5000, currency: 'usd', status: 'paid', paidAt: new Date(),
   })
 
   const unauth = await request(app).get('/api/admin/users/export')

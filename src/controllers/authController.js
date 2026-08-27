@@ -123,7 +123,7 @@ export function logout(_request, response) {
 export async function forgotPassword(request, response, next) {
   try {
     const genericMessage = 'If an account exists for that email, a password reset link has been sent.'
-    const user = await User.findOne({ email: request.body.email })
+    const user = await User.findOne({ email: request.body.email }).select('+passwordHash')
     if (!user || !user.passwordHash || user.status !== 'active') {
       return response.status(200).json({ success: true, data: { message: genericMessage } })
     }

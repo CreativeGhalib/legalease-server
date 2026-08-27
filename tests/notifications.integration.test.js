@@ -33,7 +33,7 @@ test('notification triggers fire on hiring lifecycle and read state is owner-sco
   await Notification.init()
 
   const suffix = randomBytes(6).toString('hex')
-  const emails = [`notif-lawyer.${suffix}`, `notif-client.${suffix}`, `notif-other.${suffix}`].map((local) => `${local}@legalease.test`)
+  const emails = [`notif-lawyer.${suffix}`, `notif-client.${suffix}`, `notif-other.${suffix}`, `notif-expiring.${suffix}`].map((local) => `${local}@legalease.test`)
   const sharedPassword = randomBytes(16).toString('base64url')
   const passwordHash = await bcrypt.hash(sharedPassword, 12)
   await User.deleteMany({ email: { $in: emails } })
@@ -45,7 +45,7 @@ test('notification triggers fire on hiring lifecycle and read state is owner-sco
     await mongoose.disconnect()
   })
 
-  const [lawyer, client, outsider] = await Promise.all(emails.map((email) =>
+  const [lawyer, client, outsider, expiringClient] = await Promise.all(emails.map((email) =>
     User.create({ fullName: `Notif ${email.slice(6, 12)}`, email, passwordHash, role: email === emails[0] ? 'lawyer' : 'user', providers: ['local'] }),
   ))
 
@@ -67,6 +67,7 @@ test('notification triggers fire on hiring lifecycle and read state is owner-sco
 
   const clientCookie = decodeURIComponent((await request(app).post('/api/auth/login').set('Origin', origin).send({ email: client.email, password: sharedPassword })).headers['set-cookie'][0].split(';')[0])
   const lawyerCookie = decodeURIComponent((await request(app).post('/api/auth/login').set('Origin', origin).send({ email: lawyer.email, password: sharedPassword })).headers['set-cookie'][0].split(';')[0])
+  const expiringClientCookie = decodeURIComponent((await request(app).post('/api/auth/login').set('Origin', origin).send({ email: expiringClient.email, password: sharedPassword })).headers['set-cookie'][0].split(';')[0])
 
   const hire = await request(app)
     .post('/api/hiring-requests')
@@ -92,7 +93,7 @@ test('notification triggers fire on hiring lifecycle and read state is owner-sco
   assert.equal(clientFeed.body.data.items[0].type, 'hire_decision')
 
   const dueRequest = await HiringRequest.create({
-    clientId: client._id,
+    clientId: expiringClient._id,
     lawyerId: lawyer._id,
     lawyerProfileId: profile._id,
     specializationSnapshot: 'Criminal Law',
@@ -102,8 +103,8 @@ test('notification triggers fire on hiring lifecycle and read state is owner-sco
     paymentStatus: 'unpaid',
     expiresAt: new Date(Date.now() - 60_000),
   })
-  await request(app).get('/api/hiring-requests/mine').set('Cookie', clientCookie)
-  const swept = await Notification.findOne({ userId: client._id, type: 'sla_expired' }).lean()
+  await request(app).get('/api/hiring-requests/mine').set('Cookie', expiringClientCookie)
+  const swept = await Notification.findOne({ userId: expiringClient._id, type: 'sla_expired' }).lean()
   assert.ok(swept, 'SLA sweep should create the expiry notification')
   await HiringRequest.deleteOne({ _id: dueRequest._id })
 

@@ -19,12 +19,12 @@ function emptyStats() {
 async function buildStats() {
   if (!env.MONGODB_URI) return emptyStats()
 
-  const pipeline = publicLawyerPipeline({})
+  const { pipeline, sort } = publicLawyerPipeline({})
   const [lawyerCountRows, paidHireCount, userCount, recentLawyers] = await Promise.all([
     LawyerProfile.aggregate([...pipeline, { $count: 'total' }]),
     HiringRequest.countDocuments({ status: 'accepted', paymentStatus: 'paid' }),
     User.countDocuments({ role: 'user', status: 'active' }),
-    LawyerProfile.aggregate([...pipeline, { $sort: pipeline.sort }, { $limit: 3 }, { $project: publicLawyerProjection }]),
+    LawyerProfile.aggregate([...pipeline, { $sort: sort }, { $limit: 3 }, { $project: publicLawyerProjection }]),
   ])
 
   return {

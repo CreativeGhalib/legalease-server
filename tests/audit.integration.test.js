@@ -63,7 +63,7 @@ test('admin and money actions persist queryable audit entries', { skip: !canRun 
   assert.equal(unauthList.status, 401)
 
   const adminCookie = await cookieFor(admin)
-  const lawyerCookie = await cookieFor(lawyer)
+  let lawyerCookie = await cookieFor(lawyer)
 
   // Tier change writes an entry.
   const tierChange = await request(app)
@@ -87,6 +87,7 @@ test('admin and money actions persist queryable audit entries', { skip: !canRun 
     .set('Origin', origin)
     .set('Cookie', adminCookie)
     .send({ status: 'active' })
+  lawyerCookie = await cookieFor(lawyer)
 
   const moderate = await request(app)
     .patch(`/api/admin/lawyers/${profile.id}/publication`)

@@ -140,5 +140,6 @@ test('consultation booking prevents conflicts and honours lawyer-only completion
   const busyCheck = await LawyerProfile.findByIdAndUpdate(profile.id, { availability: 'busy' }, { new: true })
   void busyCheck
   const slotsWhileBusy = await request(app).get(`/api/lawyers/${profile.id}/slots`).query({ dateKey })
-  assert.equal(slotsWhileBusy.body.data.slots.length, 0)
+  assert.equal(slotsWhileBusy.status, 404)
+  assert.equal(slotsWhileBusy.body.error.code, 'LAWYER_NOT_FOUND')
 })

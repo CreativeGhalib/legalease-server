@@ -118,6 +118,7 @@ test('paid engagements can be reviewed once and lawyer ratings aggregate publicl
   assert.equal(duplicate.body.error.code, 'REVIEW_ALREADY_EXISTS')
 
   const cookieB = decodeURIComponent((await login(clientB)).headers['set-cookie'][0].split(';')[0])
+  const cookieC = decodeURIComponent((await login(clientC)).headers['set-cookie'][0].split(';')[0])
   const second = await submitReview(cookieB, { hiringRequestId: String(engagementB.id), rating: 3 })
   assert.equal(second.status, 201)
 
@@ -125,7 +126,7 @@ test('paid engagements can be reviewed once and lawyer ratings aggregate publicl
   assert.equal(storedProfile.averageRating, 4)
   assert.equal(storedProfile.reviewCount, 2)
 
-  const ineligible = await submitReview(cookieA, { hiringRequestId: String(pendingEngagementC.id), rating: 5 })
+  const ineligible = await submitReview(cookieC, { hiringRequestId: String(pendingEngagementC.id), rating: 5 })
   assert.equal(ineligible.status, 403)
   assert.equal(ineligible.body.error.code, 'REVIEW_NOT_ELIGIBLE')
 

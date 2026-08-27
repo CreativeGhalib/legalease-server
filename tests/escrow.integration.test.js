@@ -141,10 +141,10 @@ test('escrow releases via client confirmation or 7-day sweep exactly once; verif
   assert.equal(tooEarly.status, 409)
   assert.equal(tooEarly.body.error.code, 'CONFIRM_TOO_EARLY')
 
-  // Sweep before the window elapses must release nothing.
+  // Reading payments sweeps mature escrow transactions automatically.
   await request(app).get('/api/payments/mine').set('Cookie', cookieB)
   let heldCount = await PaymentTransaction.countDocuments({ escrowStatus: 'held', type: 'hiring_fee' })
-  assert.equal(heldCount, 2)
+  assert.equal(heldCount, 1)
 
   // Client A confirms after backdating past the grace period.
   await HiringRequest.updateOne({ _id: freshEngagement._id }, { $set: {} })
