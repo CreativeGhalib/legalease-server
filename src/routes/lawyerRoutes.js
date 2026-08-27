@@ -10,6 +10,7 @@ import { publicLawyerQuerySchema } from '../validators/publicLawyerValidators.js
 import { getPublicLawyer, listFeaturedLawyers, listPublicLawyers, listTopLawyers } from '../controllers/publicLawyerController.js'
 import { getLawyerSlots } from '../controllers/appointmentController.js'
 import { updatePublication } from '../controllers/paymentController.js'
+import { getLawyerAnalytics } from '../controllers/analyticsController.js'
 import { slotsQuerySchema } from '../validators/appointmentValidators.js'
 import { z } from 'zod'
 
@@ -27,5 +28,8 @@ lawyerRouter.post('/me/profile', verifyOrigin, validate(lawyerProfileSchema), cr
 lawyerRouter.patch('/me/profile', verifyOrigin, validate(lawyerProfileSchema), updateMyLawyerProfile)
 lawyerRouter.delete('/me/profile', verifyOrigin, deleteMyLawyerProfile)
 lawyerRouter.patch('/me/publication', verifyOrigin, validate(z.object({ publicationStatus: z.enum(['published', 'unpublished']) }).strict()), updatePublication)
+
+// Lawyer analytics dashboard (11-D)
+lawyerRouter.get('/me/analytics', getLawyerAnalytics)
 
 export default lawyerRouter

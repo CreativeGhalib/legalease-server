@@ -28,6 +28,7 @@ const lawyerProfileSchema = new mongoose.Schema({
   deletedAt: { type: Date, default: null },
   deletedByRole: { type: String, enum: ['lawyer', 'admin', null], default: null },
   paidHireCount: { type: Number, min: 0, default: 0 },
+  profileViewCount: { type: Number, min: 0, default: 0 },
 }, { timestamps: true })
 
 // userId uniqueness already defined inline above

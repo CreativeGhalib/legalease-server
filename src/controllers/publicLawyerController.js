@@ -108,6 +108,8 @@ export async function getPublicLawyer(request, response, next) {
     const { pipeline } = publicLawyerPipeline()
     const [lawyer] = await LawyerProfile.aggregate([{ $match: { _id: new mongoose.Types.ObjectId(request.params.id) } }, ...pipeline, { $project: publicLawyerProjection }])
     if (!lawyer) throw notAvailableError()
+    // Fire-and-forget view counter — never blocks the response (11-D)
+    LawyerProfile.updateOne({ _id: new mongoose.Types.ObjectId(request.params.id) }, { $inc: { profileViewCount: 1 } }).catch(() => {})
     return response.json({ success: true, data: { lawyer } })
   } catch (error) { return next(error) }
 }
