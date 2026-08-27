@@ -2,10 +2,6 @@ import { Appointment } from '../models/Appointment.js'
 import { HiringRequest } from '../models/HiringRequest.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
 
-function fail(message, statusCode, code) {
-  return Object.assign(new Error(message), { statusCode, code })
-}
-
 /**
  * GET /api/lawyers/me/analytics
  * Lawyer-only: returns profile view count, hire metrics, 30-day hire trend.
@@ -13,9 +9,12 @@ function fail(message, statusCode, code) {
  */
 export async function getLawyerAnalytics(request, response, next) {
   try {
-    const profile = await LawyerProfile.findOne({ userId: request.auth.user.id })
-      .select('profileViewCount _id').lean()
-    if (!profile) throw fail('Lawyer profile not found.', 404, 'PROFILE_NOT_FOUND')
+    // A newly registered lawyer can open Analytics before completing a profile.
+    // Treat that as an empty analytics state rather than making the dashboard fail.
+    const profile = await LawyerProfile.findOne({
+      userId: request.auth.user.id,
+      publicationStatus: { $ne: 'deleted' },
+    }).select('profileViewCount _id').lean()
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
@@ -26,7 +25,7 @@ export async function getLawyerAnalytics(request, response, next) {
         { lawyerId: request.auth.user.id, createdAt: { $gte: thirtyDaysAgo } },
         { createdAt: 1 },
       ).lean(),
-      Appointment.countDocuments({ lawyerProfileId: profile._id }),
+      profile ? Appointment.countDocuments({ lawyerProfileId: profile._id }) : 0,
     ])
 
     // Build 30-day daily bucketed trend (keys: YYYY-MM-DD)
@@ -44,7 +43,7 @@ export async function getLawyerAnalytics(request, response, next) {
     return response.json({
       success: true,
       data: {
-        profileViews: profile.profileViewCount ?? 0,
+        profileViews: profile?.profileViewCount ?? 0,
         totalHires,
         paidHires,
         conversionRate: totalHires > 0 ? Math.round((paidHires / totalHires) * 100) : 0,
