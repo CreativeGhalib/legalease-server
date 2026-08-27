@@ -133,7 +133,7 @@ test('paid engagements can be reviewed once and lawyer ratings aggregate publicl
   const publicList = await request(app).get(`/api/lawyers/${profile.id}/reviews`).query({ page: 1, limit: 1 })
   assert.equal(publicList.status, 200)
   assert.equal(publicList.body.data.items.length, 1)
-  assert.equal(publicList.body.data.meta.totalItems, 2)
+  assert.equal(publicList.body.meta.totalItems, 2)
   assert.deepEqual(publicList.body.data.ratingCounts, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, ...Object.fromEntries([[3, 1], [5, 1]]) })
   assert.equal(publicList.body.data.items[0].rating, 3)
   assert.equal(publicList.body.data.items[0].reviewer.fullName.includes('Review Fixture'), true)
