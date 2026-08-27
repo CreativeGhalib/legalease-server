@@ -13,6 +13,12 @@ async function startServer() {
     })
   })
 
+  // ── Request timeout (M-7) ──────────────────────────────────────────────────
+  // 30 s keeps connections from hanging indefinitely during slow external calls.
+  // Vercel serverless has its own gateway timeout; this guards self-hosted use.
+  server.timeout = 30_000
+  server.keepAliveTimeout = 35_000  // must exceed timeout
+
   // ── Graceful shutdown ──────────────────────────────────────────────────────
   // Allows in-flight requests to complete before closing DB connections.
   // Without this, abrupt kills can corrupt in-progress writes.

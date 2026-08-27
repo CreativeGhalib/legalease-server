@@ -5,6 +5,7 @@ import { env } from '../config/env.js'
 import { logger } from '../config/logger.js'
 import { clearSessionCookie, createSessionToken, setSessionCookie, toSafeUser } from '../utils/auth.js'
 import { finalizeAccountDeletionIfDue } from '../utils/accountDeletion.js'
+import { sendPasswordResetEmail } from '../services/emailService.js'
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000
 const LOGIN_FAILURE_LOCK_LIMIT = 5
 const LOGIN_LOCK_DURATION_MS = 30 * 60 * 1000
@@ -42,12 +43,18 @@ function hashResetToken(rawToken) {
   return crypto.createHash('sha256').update(rawToken).digest('hex')
 }
 
-function dispatchPasswordResetEmail(email, resetUrl) {
-  if (env.NODE_ENV === 'production') {
-    logger.info('Password reset email dispatched.', { email })
-    return
+async function dispatchPasswordResetEmail(email, resetUrl) {
+  // Fire-and-forget — don't block the API response if email is slow/unavailable.
+  // Always log in dev for easy debugging without email server.
+  if (env.NODE_ENV !== 'production') {
+    logger.info(`[dev] Password reset link for ${email}: ${resetUrl}`)
   }
-  logger.info(`[dev] Password reset link for ${email}: ${resetUrl}`)
+  try {
+    await sendPasswordResetEmail(email, resetUrl)
+    logger.info('Password reset email dispatched.', { email })
+  } catch (error) {
+    logger.warn('Password reset email failed — user must use resend.', { email, error: error.message })
+  }
 }
 
 export async function register(request, response, next) {

@@ -1,6 +1,7 @@
 import { env } from '../config/env.js'
 
 let sentryPromise = null
+let sentryInitialized = false
 
 async function loadSentry() {
   if (!sentryPromise) {

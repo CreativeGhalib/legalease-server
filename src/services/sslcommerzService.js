@@ -175,7 +175,7 @@ export async function handleSslcommerzIpn(ipnPayload) {
     return { fulfilled: true, transactionId: String(transaction._id) }
   }
 
-  const hiringRequest = await HiringRequest.findOne({ hiringRequestId: transaction.hiringRequestId })
+  const hiringRequest = await HiringRequest.findById(transaction.hiringRequestId)
   if (!hiringRequest || hiringRequest.paymentStatus === 'paid') {
     throw fail('IPN does not match the stored obligation.', 400, 'INVALID_IPN')
   }
@@ -243,8 +243,4 @@ export async function initiateSslcommerzAppointmentCheckout(user, appointmentId)
   )
 
   return { transactionId: transaction.id, redirectUrl: gatewayResponse.GatewayPageURL }
-}
-
-function payerLabel(user) {
-  return user.fullName || 'LegalEase client'
 }

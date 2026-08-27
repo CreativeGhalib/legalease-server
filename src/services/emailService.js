@@ -132,3 +132,23 @@ export async function sendProfilePublishedEmail(lawyer) {
 export async function sendHireExpiredEmail(client, lawyer, hiringRequest) {
   await deliver(buildHireExpiredEmail(client, lawyer, hiringRequest))
 }
+
+export function buildPasswordResetEmail(email, resetUrl) {
+  return {
+    to: email,
+    subject: 'Reset your LegalEase password',
+    html: renderEmail({
+      title: 'Password reset request',
+      bodyHtml: `<p>We received a request to reset the password for your LegalEase account.</p>
+<p>Click the button below to choose a new password. This link is valid for <strong>1 hour</strong>.</p>
+<p style="text-align:center;margin:24px 0;">
+  <a href="${resetUrl}" style="display:inline-block;background-color:#1b3a6b;color:#fff;padding:12px 28px;border-radius:8px;font-weight:bold;text-decoration:none;">Reset Password</a>
+</p>
+<p style="font-size:13px;color:#69798e;">If you did not request a password reset, you can safely ignore this email. Your password will not change.</p>`,
+    }),
+  }
+}
+
+export async function sendPasswordResetEmail(email, resetUrl) {
+  await deliver(buildPasswordResetEmail(email, resetUrl))
+}

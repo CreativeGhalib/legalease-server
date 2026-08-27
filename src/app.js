@@ -8,7 +8,7 @@ import { ensureDatabaseConnection } from './config/database.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { notFound } from './middleware/notFound.js'
 import { requestLogger } from './middleware/requestLogger.js'
-import { apiLimiter, authLimiter, uploadLimiter } from './middleware/rateLimiter.js'
+import { apiLimiter, authLimiter, uploadLimiter } from './middleware/rateLimits.js'
 import healthRouter from './routes/healthRoutes.js'
 import authRouter from './routes/authRoutes.js'
 import lawyerRouter from './routes/lawyerRoutes.js'
@@ -26,6 +26,7 @@ import appointmentRouter from './routes/appointmentRoutes.js'
 import intakeRouter from './routes/intakeRoutes.js'
 import disputeRouter from './routes/disputeRoutes.js'
 import seoRouter from './routes/seoRoutes.js'
+import leadRouter from './routes/leadRoutes.js'
 
 const app = express()
 
@@ -53,11 +54,15 @@ app.use(helmet({
   } : undefined,
   // crossOriginEmbedderPolicy breaks Stripe elements — keep off
   crossOriginEmbedderPolicy: false,
+  // Explicit Referrer-Policy — prevents URL leakage across origins for a legal platform (M-15)
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }))
 
 // ── CORS ───────────────────────────────────────────────────────────────────────
 app.use(cors({
   credentials: true,
+  // Cache preflight responses for 24 hours — avoids OPTIONS request on every API call (M-9)
+  maxAge: 86400,
   origin(origin, callback) {
     if (!origin || env.clientOrigins.includes(origin)) return callback(null, true)
     return callback(Object.assign(
@@ -81,9 +86,11 @@ if (process.env.VERCEL) {
 
 // ── Stripe webhook (raw body BEFORE json parser) ───────────────────────────────
 app.use('/api/payments', stripeWebhookRouter)
+app.use('/api/v1/payments', stripeWebhookRouter)
 
 // ── SSLCommerz IPN (form-encoded BEFORE json parser) ──────────────────────────
 app.use('/api/payments/sslcommerz', sslcommerzIpnRouter)
+app.use('/api/v1/payments/sslcommerz', sslcommerzIpnRouter)
 
 // ── Body parsing ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '100kb' }))
@@ -94,36 +101,58 @@ app.use(express.json({ limit: '100kb' }))
 // Query-string injection is handled by Zod validators in every route.
 app.use(sanitizeBody)
 
-// ── Compression ────────────────────────────────────────────────────────────────
-// Gzip/Brotli JSON responses — reduces bandwidth 60-80%, free performance
-app.use(compression())
-
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 app.use('/api', apiLimiter)
 app.use('/api/auth', authLimiter)
+app.use('/api/v1/auth', authLimiter)
 app.use('/api/uploads', uploadLimiter)
+app.use('/api/v1/uploads', uploadLimiter)
+
+// ── Compression ────────────────────────────────────────────────────────────────
+// Applied AFTER rate limiting so rejected requests don't consume compression CPU (M-8).
+// Gzip/Brotli JSON responses — reduces bandwidth 60-80%.
+app.use(compression())
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
 app.use('/api/health', healthRouter)
+app.use('/api/v1/health', healthRouter)
 app.use('/api/auth', authRouter)
+app.use('/api/v1/auth', authRouter)
 app.use('/api/users', userRouter)
+app.use('/api/v1/users', userRouter)
 app.use('/api/hiring-requests', hiringRouter)
+app.use('/api/v1/hiring-requests', hiringRouter)
 app.use('/api/comments', commentRouter)
+app.use('/api/v1/comments', commentRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/v1/admin', adminRouter)
 app.use('/api/lawyers', lawyerCommentRouter)
 app.use('/api/lawyers', lawyerRouter)
+app.use('/api/v1/lawyers', lawyerCommentRouter)
+app.use('/api/v1/lawyers', lawyerRouter)
 app.use('/api/uploads', uploadRouter)
+app.use('/api/v1/uploads', uploadRouter)
 app.use('/api/payments', paymentRouter)
+app.use('/api/v1/payments', paymentRouter)
 app.use('/api/reviews', reviewRouter)
+app.use('/api/v1/reviews', reviewRouter)
 app.use('/api', publicRouter)
+app.use('/api/v1', publicRouter)
+app.use('/api', leadRouter)
+app.use('/api/v1', leadRouter)
 // ── Search engine endpoints (root-level, public) ─────────────────────────────
 app.use('/', seoRouter)
 
 app.use('/api/notifications', notificationRouter)
+app.use('/api/v1/notifications', notificationRouter)
 app.use('/api/cases', caseRouter)
+app.use('/api/v1/cases', caseRouter)
 app.use('/api/appointments', appointmentRouter)
+app.use('/api/v1/appointments', appointmentRouter)
 app.use('/api/intake', intakeRouter)
+app.use('/api/v1/intake', intakeRouter)
 app.use('/api/disputes', disputeRouter)
+app.use('/api/v1/disputes', disputeRouter)
 
 // ── Error handling ─────────────────────────────────────────────────────────────
 app.use(notFound)
