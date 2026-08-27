@@ -39,15 +39,16 @@ test('public stats endpoint serves cached marketplace counts with graceful zero 
   })
 
   const suffix = randomBytes(6).toString('hex')
-  const fixtureEmails = [`stats-lawyer.${suffix}@legalease.test`, `stats-user.${suffix}@legalease.test`, `stats-client.${suffix}@legalease.test`, `stats-client2.${suffix}@legalease.test`]
-  const [lawyerEmail] = fixtureEmails
+  const fixtureEmails = [`stats-lawyer.${suffix}@legalease.test`, `stats-user.${suffix}@legalease.test`, `stats-client.${suffix}@legalease.test`, `stats-client2.${suffix}@legalease.test`, `stats-hidden-lawyer.${suffix}@legalease.test`]
+  const [lawyerEmail, memberEmail, clientEmail, clientTwoEmail, hiddenLawyerEmail] = fixtureEmails
   const sharedPassword = randomBytes(16).toString('base64url')
   const passwordHash = await bcrypt.hash(sharedPassword, 12)
 
   const lawyer = await User.create({ fullName: 'Stats Lawyer', email: lawyerEmail, passwordHash, role: 'lawyer', providers: ['local'] })
-  await User.create({ fullName: 'Stats Member', email: fixtureEmails[1], passwordHash, role: 'user', providers: ['local'] })
-  const client = await User.create({ fullName: 'Stats Client', email: fixtureEmails[2], passwordHash, role: 'user', providers: ['local'] })
-  const clientTwo = await User.create({ fullName: 'Stats Client Two', email: fixtureEmails[3], passwordHash, role: 'user', providers: ['local'] })
+  await User.create({ fullName: 'Stats Member', email: memberEmail, passwordHash, role: 'user', providers: ['local'] })
+  const client = await User.create({ fullName: 'Stats Client', email: clientEmail, passwordHash, role: 'user', providers: ['local'] })
+  const clientTwo = await User.create({ fullName: 'Stats Client Two', email: clientTwoEmail, passwordHash, role: 'user', providers: ['local'] })
+  const hiddenLawyer = await User.create({ fullName: 'Stats Hidden Lawyer', email: hiddenLawyerEmail, passwordHash, role: 'lawyer', providers: ['local'] })
 
   const profile = await LawyerProfile.create({
     userId: lawyer.id,
@@ -60,7 +61,7 @@ test('public stats endpoint serves cached marketplace counts with graceful zero 
     verificationStatus: 'paid',
     publicationStatus: 'published',
   })
-  await LawyerProfile.create({ userId: lawyer.id, specialization: 'Hidden', consultationFeeMinor: 1000, publicationStatus: 'draft' })
+  await LawyerProfile.create({ userId: hiddenLawyer.id, specialization: 'Hidden', consultationFeeMinor: 1000, publicationStatus: 'draft' })
 
   await HiringRequest.create({
     clientId: client.id,

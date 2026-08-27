@@ -33,7 +33,7 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
   await PaymentTransaction.init()
 
   const suffix = randomBytes(6).toString('hex')
-  const emails = ['disp-lawyer', 'disp-client-a', 'disp-client-b'].map((local) => `${local}.${suffix}@legalease.test`)
+  const emails = ['disp-lawyer', 'disp-client-a', 'disp-client-b', 'disp-client-c'].map((local) => `${local}.${suffix}@legalease.test`)
   emails.push(`disp-admin.${suffix}@legalease.test`)
   const sharedPassword = randomBytes(16).toString('base64url')
   const passwordHash = await bcrypt.hash(sharedPassword, 12)
@@ -46,7 +46,7 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
     await mongoose.disconnect()
   })
 
-  const [lawyer, clientA, clientB, admin] = await Promise.all(emails.map((email) =>
+  const [lawyer, clientA, clientB, clientC, admin] = await Promise.all(emails.map((email) =>
     User.create({
       fullName: `Dispute ${email.split('.')[0]}`,
       email,
@@ -103,8 +103,7 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
   const disputedTxn = await seedHeldTxn(disputedEngagement)
   const refundCandidate = await seedPaidEngagement(clientB, 29)
   const refundTxn = await seedHeldTxn(refundCandidate)
-  const windowClosed = await seedPaidEngagement(clientB, 31)
-  void windowClosed
+  const windowClosed = await seedPaidEngagement(clientC, 31)
 
   function login(user) {
     return request(app).post('/api/auth/login').set('Origin', origin).send({ email: user.email, password: sharedPassword })
@@ -117,6 +116,7 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
 
   const cookieA = await cookieFor(clientA)
   const cookieB = await cookieFor(clientB)
+  const cookieC = await cookieFor(clientC)
   const cookieLawyer = await cookieFor(lawyer)
   const cookieAdmin = await cookieFor(admin)
 
@@ -136,9 +136,10 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
   const windowClosedAttempt = await request(app)
     .post('/api/disputes')
     .set('Origin', origin)
-    .set('Cookie', cookieB)
-    .send({ hiringRequestId: String(refundCandidate._id).slice(0, -1), reason: 'Boundary probe.' })
-  assert.ok([400, 404].includes(windowClosedAttempt.status))
+    .set('Cookie', cookieC)
+    .send({ hiringRequestId: String(windowClosed._id), reason: 'The paid work remains disputed after the service window.' })
+  assert.equal(windowClosedAttempt.status, 403)
+  assert.equal(windowClosedAttempt.body.error.code, 'DISPUTE_WINDOW_CLOSED')
 
   const opened = await request(app)
     .post('/api/disputes')

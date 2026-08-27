@@ -78,7 +78,7 @@ test('admin CSV exports stream dated attachments with injection-safe rows', { sk
 
   const lawyersCsv = await request(app).get('/api/admin/lawyers/export?verificationStatus=paid').set('Cookie', adminCookie)
   assert.equal(lawyersCsv.status, 200)
-  assert.match(lawyersCsv.text, /^.*,tier,paidHireCount,/m)
+  assert.match(lawyersCsv.text, /barAssociationBranch,tier,consultationFeeMinor,currency,availability,verificationStatus,publicationStatus,paidHireCount/)
   assert.ok(lawyersCsv.text.includes(',silver,'))
 
   const transactionsCsv = await request(app).get('/api/admin/transactions/export?status=paid').set('Cookie', adminCookie)

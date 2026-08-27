@@ -15,10 +15,12 @@ test('rate limit store falls back to MemoryStore without a database URI', () => 
 
 test('rate limit store instances satisfy the express-rate-limit v8 contract with isolated prefixes', async () => {
   const originalUri = env.MONGODB_URI
+  const originalEnvironment = env.NODE_ENV
   env.MONGODB_URI = 'mongodb://127.0.0.1:27017/legalease_rate_limit_store_test'
+  env.NODE_ENV = 'test'
   try {
-    const auth = mongoRateLimitStore('auth', 15 * 60 * 1000)
-    const api = mongoRateLimitStore('api', 60 * 1000)
+    const auth = new RateLimitMongoStore({ prefix: 'auth', windowMs: 15 * 60 * 1000 })
+    const api = new RateLimitMongoStore({ prefix: 'api', windowMs: 60 * 1000 })
 
     assert.ok(auth instanceof RateLimitMongoStore)
     assert.equal(auth.windowMs, 15 * 60 * 1000)
@@ -28,6 +30,7 @@ test('rate limit store instances satisfy the express-rate-limit v8 contract with
     assert.equal(typeof auth.decrement, 'function')
     assert.equal(typeof auth.resetKey, 'function')
     assert.equal(auth.localKeys, false)
+    assert.equal(mongoRateLimitStore('auth', 15 * 60 * 1000), undefined)
 
     await assert.deepEqual(
       await new RateLimitMongoStore({ windowMs: 60_000, prefix: 'probe' }).increment('probe-key'),
@@ -38,6 +41,7 @@ test('rate limit store instances satisfy the express-rate-limit v8 contract with
       assert.match(prefix, /^[a-zA-Z]+$/)
     }
   } finally {
+    env.NODE_ENV = originalEnvironment
     if (originalUri) env.MONGODB_URI = originalUri
     else delete env.MONGODB_URI
   }

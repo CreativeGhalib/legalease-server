@@ -101,6 +101,9 @@ export class RateLimitMongoStore {
 }
 
 export function mongoRateLimitStore(prefix, windowMs) {
-  if (!env.MONGODB_URI) return undefined
+  // Node's test runner executes each integration file in an isolated process.
+  // Keeping the default in-memory store in tests prevents one suite's loopback
+  // traffic from exhausting another suite's shared Mongo-backed IP bucket.
+  if (env.NODE_ENV === 'test' || !env.MONGODB_URI) return undefined
   return new RateLimitMongoStore({ windowMs, prefix })
 }

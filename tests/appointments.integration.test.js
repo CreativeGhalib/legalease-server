@@ -114,7 +114,8 @@ test('consultation booking prevents conflicts and honours lawyer-only completion
     .patch(`/api/appointments/${firstBooking.body.data.appointment.id}/complete`)
     .set('Origin', origin)
     .set('Cookie', cookieA)
-  assert.equal(clientCancelForbidden.status, 403)
+  assert.equal(clientCancelForbidden.status, 404)
+  assert.equal(clientCancelForbidden.body.error.code, 'APPOINTMENT_NOT_FOUND')
 
   const complete = await request(app)
     .patch(`/api/appointments/${firstBooking.body.data.appointment.id}/complete`)

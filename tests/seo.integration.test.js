@@ -37,6 +37,7 @@ test('robots and sitemap expose only public surfaces with eligible lawyer URLs',
 
   const suffix = randomBytes(6).toString('hex')
   const emails = ['seo-lawyer', 'seo-hidden-lawyer'].map((local) => `${local}.${suffix}@legalease.test`)
+  const [lawyerEmail, hiddenEmail] = emails
   const passwordHash = await bcrypt.hash(randomBytes(16).toString('base64url'), 12)
   await User.deleteMany({ email: { $in: emails } })
 

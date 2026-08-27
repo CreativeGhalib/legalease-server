@@ -45,8 +45,9 @@ test('admin deactivation revokes existing sessions even after the account is rea
   const adminCookie = decodeURIComponent(adminLogin.headers['set-cookie'][0].split(';')[0])
 
   const preDeactivationToken = createSessionToken({ id: victim.id, tokenVersion: victim.tokenVersion })
+  const preDeactivationCookie = `${process.env.COOKIE_NAME ?? 'legalease_session'}=${preDeactivationToken}`
 
-  const preUse = await request(app).get('/api/auth/me').set('Cookie', preDeactivationToken)
+  const preUse = await request(app).get('/api/auth/me').set('Cookie', preDeactivationCookie)
   assert.equal(preUse.status, 200)
 
   const deactivate = await request(app)
@@ -60,7 +61,7 @@ test('admin deactivation revokes existing sessions even after the account is rea
   const storedAfterDeactivation = await User.findById(victim.id)
   assert.equal(storedAfterDeactivation.tokenVersion, victim.tokenVersion + 1)
 
-  const rejectedWhileInactive = await request(app).get('/api/auth/me').set('Cookie', preDeactivationToken)
+  const rejectedWhileInactive = await request(app).get('/api/auth/me').set('Cookie', preDeactivationCookie)
   assert.equal(rejectedWhileInactive.status, 401)
 
   const reactivate = await request(app)
@@ -70,7 +71,7 @@ test('admin deactivation revokes existing sessions even after the account is rea
     .send({ status: 'active' })
   assert.equal(reactivate.status, 200)
 
-  const staleReplay = await request(app).get('/api/auth/me').set('Cookie', preDeactivationToken)
+  const staleReplay = await request(app).get('/api/auth/me').set('Cookie', preDeactivationCookie)
   assert.equal(staleReplay.status, 401)
   assert.equal(staleReplay.body.error.code, 'AUTHENTICATION_REQUIRED')
 
