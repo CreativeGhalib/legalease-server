@@ -130,6 +130,7 @@ export async function listMyAppointments(request, response, next) {
     const items = await Appointment.find({ userId: request.auth.user.id })
       .sort({ dateKey: -1, start: -1 })
       .populate({ path: 'lawyerProfileId', select: 'userId specialization', populate: { path: 'userId', select: 'fullName' } })
+      .lean()  // M-10: read-only list
     return response.json({
       success: true,
       data: {
@@ -162,6 +163,7 @@ export async function listLawyerAppointments(request, response, next) {
     const items = await Appointment.find({ lawyerProfileId: profile._id })
       .sort({ dateKey: -1, start: -1 })
       .populate('userId', 'fullName')
+      .lean()  // M-10: read-only list
     return response.json({
       success: true,
       data: {

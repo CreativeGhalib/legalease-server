@@ -27,7 +27,8 @@ export async function listNotifications(request, response, next) {
       Notification.find(filter)
         .sort({ createdAt: -1, _id: -1 })
         .skip((query.page - 1) * query.limit)
-        .limit(query.limit),
+        .limit(query.limit)
+        .lean(),  // M-10: read-only list — lean skips Mongoose hydration
       Notification.countDocuments(filter),
       Notification.countDocuments({ userId: request.auth.user.id, isRead: false }),
     ])

@@ -11,6 +11,9 @@ const appointmentSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ['unpaid', 'paid'], default: 'unpaid' },
   amountMinor: { type: Number, min: 0, default: null },
   feeGateway: { type: String, enum: ['stripe', 'sslcommerz'], default: null },
+  // M-3: guard flag — true while Stripe/SSLCommerz checkout is being created
+  // Prevents lazy-sweep from cancelling a slot mid-checkout
+  checkoutCreating: { type: Boolean, default: false },
 }, { timestamps: true })
 
 // Race-proof double-booking guard: one *active* appointment per lawyer/date/start.

@@ -122,6 +122,7 @@ export async function cancelUnpaidAppointmentHolds(filterBase = {}) {
     ...filterBase,
     status: 'scheduled',
     paymentStatus: 'unpaid',
+    checkoutCreating: { $ne: true },  // M-3: skip slots mid-checkout
     createdAt: { $lt: cutoff },
   })
     .select('_id')
@@ -130,7 +131,7 @@ export async function cancelUnpaidAppointmentHolds(filterBase = {}) {
   let cancelled = 0
   for (const doc of due) {
     const updated = await Appointment.findOneAndUpdate(
-      { _id: doc._id, status: 'scheduled', paymentStatus: 'unpaid' },
+      { _id: doc._id, status: 'scheduled', paymentStatus: 'unpaid', checkoutCreating: { $ne: true } },
       { $set: { status: 'cancelled' } },
       { new: true },
     )
