@@ -57,6 +57,7 @@ export function toSafeUser(user) {
     profileImageUrl: user.profileImageUrl,
     role: user.role,
     status: user.status,
+    hasLocalPassword: Array.isArray(user.providers) && user.providers.includes('local'),
     phone: user.phone ?? null,
     phoneVerified: Boolean(user.phoneVerified),
     deletionRequestedAt: user.deletionRequestedAt ?? null,

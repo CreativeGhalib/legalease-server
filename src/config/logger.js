@@ -1,5 +1,4 @@
 import winston from 'winston'
-import 'winston-daily-rotate-file'
 
 const { combine, timestamp, errors, json, colorize, printf } = winston.format
 
@@ -20,24 +19,6 @@ const prodFormat = combine(
 )
 
 const transports = [new winston.transports.Console()]
-
-if (process.env.NODE_ENV === 'production') {
-  transports.push(
-    new winston.transports.DailyRotateFile({
-      filename: 'logs/error-%DATE%.log',
-      datePattern: 'YYYY-MM-DD',
-      level: 'error',
-      maxFiles: '14d',
-      zippedArchive: true,
-    }),
-    new winston.transports.DailyRotateFile({
-      filename: 'logs/combined-%DATE%.log',
-      datePattern: 'YYYY-MM-DD',
-      maxFiles: '7d',
-      zippedArchive: true,
-    })
-  )
-}
 
 export const logger = winston.createLogger({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',

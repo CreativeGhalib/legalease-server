@@ -59,6 +59,7 @@ test('email/password authentication integration', { skip: !canRun && 'Set TEST_M
 
   assert.equal(registration.status, 201)
   assert.equal(registration.body.data.user.email, 'auth.integration@legalease.test')
+  assert.equal(registration.body.data.user.hasLocalPassword, true)
   assert.equal(registration.body.data.user.passwordHash, undefined)
   assert.match(registration.headers['set-cookie'][0], /HttpOnly/)
   assert.match(registration.headers['set-cookie'][0], /Max-Age=604800/)

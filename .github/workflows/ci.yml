@@ -49,7 +49,7 @@ jobs:
       # Unit + integration tests. With the MongoDB service and TEST_* variables set,
       # the guarded database suites execute instead of skipping.
       - name: Run tests
-        run: npm test -- --experimental-test-coverage
+        run: npm test -- --experimental-test-coverage --test-concurrency=1
         env:
           NODE_ENV: test
           TEST_MONGODB_URI: mongodb://127.0.0.1:27017/legalease_ci

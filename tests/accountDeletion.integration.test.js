@@ -99,6 +99,13 @@ test('account deletion grace period, lazy anonymization, and session revocation'
 
   cleared = await User.findById(localUser._id).select('+deletionRequestedAt')
   const oldCookieBeforeBackdate = reloginDuringGrace
+  const upcomingAppointment = await Appointment.create({
+    lawyerProfileId: new mongoose.Types.ObjectId(),
+    userId: localUser._id,
+    dateKey: '2099-12-31',
+    start: '10:00',
+    end: '10:30',
+  })
   await User.updateOne({ _id: localUser._id }, { $set: { deletionRequestedAt: new Date(Date.now() - 1_000) } })
 
   const finalizedProbe = await request(app).get('/api/auth/me').set('Cookie', oldCookieBeforeBackdate)
@@ -122,20 +129,21 @@ test('account deletion grace period, lazy anonymization, and session revocation'
   assert.equal(postDeleteLogin.status, 401)
 
   // Upcoming scheduled appointment auto-cancelled by finalize.
-  void clientB
+  assert.equal((await Appointment.findById(upcomingAppointment._id)).status, 'cancelled')
 
   const deletionAudit = await AuditLog.findOne({ action: 'account.delete' }).lean()
   assert.ok(deletionAudit, 'expected an account.delete audit entry')
   assert.equal(deletionAudit.targetId, String(localUser._id))
 
   // Google-only user can request deletion with confirm flag (no password).
-  const googleCookie = decodeURIComponent((await request(app).post('/api/auth/login').set('Origin', origin).send({ email: emails[1], password: sharedPassword })).headers['set-cookie'][0].split(';')[0]).slice(0, 0) || ''
-  void googleCookie
+  const { createSessionToken } = await import('../src/utils/auth.js')
+  const googleCookie = `legalease_session=${encodeURIComponent(createSessionToken(googleUser))}`
   const googleConfirm = await request(app)
     .post('/api/users/me/delete-request')
     .set('Origin', origin)
+    .set('Cookie', googleCookie)
     .send({ confirm: true })
-  assert.notEqual(googleConfirm.status, 400, 'confirm-flag path should pass validation')
+  assert.equal(googleConfirm.status, 200)
 
   // Session revocation: fresh login for revoke user, then revoke-all.
   const revokeCookie = await login(revokeUser)
