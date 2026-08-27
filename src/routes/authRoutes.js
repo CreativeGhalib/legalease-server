@@ -4,6 +4,7 @@ import { completeGoogleOnboarding, googleAuthenticate } from '../controllers/goo
 import { authenticate } from '../middleware/authenticate.js'
 import { authRateLimit } from '../middleware/rateLimits.js'
 import { sendPhoneOtp, verifyPhoneOtp } from '../controllers/phoneVerificationController.js'
+import { listSessions, revokeSession, revokeAllSessions } from '../controllers/sessionController.js'
 import { validate } from '../middleware/validate.js'
 import { verifyOrigin } from '../middleware/verifyOrigin.js'
 import { changePasswordSchema, forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema, sendPhoneOtpSchema, verifyPhoneOtpSchema } from '../validators/authValidators.js'
@@ -23,5 +24,10 @@ authRouter.post('/reset-password', authRateLimit, verifyOrigin, validate(resetPa
 authRouter.patch('/change-password', authenticate, verifyOrigin, validate(changePasswordSchema), changePassword)
 authRouter.get('/me', authenticate, getCurrentUser)
 authRouter.post('/logout', verifyOrigin, logout)
+
+// Session management (6-H)
+authRouter.get('/sessions', authenticate, listSessions)
+authRouter.delete('/sessions', authenticate, verifyOrigin, revokeAllSessions)
+authRouter.delete('/sessions/:sid', authenticate, verifyOrigin, revokeSession)
 
 export default authRouter

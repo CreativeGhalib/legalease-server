@@ -1,4 +1,5 @@
 import { User } from '../models/User.js'
+import { UserSession } from '../models/UserSession.js'
 import { readCookie, verifySessionToken } from '../utils/auth.js'
 import { env } from '../config/env.js'
 
@@ -16,7 +17,22 @@ export async function authenticate(request, _response, next) {
     const payload = verifySessionToken(token)
     const user = await User.findById(payload.sub)
     if (!user || user.status !== 'active' || user.tokenVersion !== payload.tokenVersion) throw sessionError()
-    request.auth = { user }
+    request.auth = { user, sid: payload.sid ?? null }
+    // Fire-and-forget session tracking — never blocks the request (6-H)
+    if (payload.sid) {
+      UserSession.updateOne(
+        { sid: payload.sid },
+        {
+          $set: {
+            userId: user._id,
+            lastSeen: new Date(),
+            userAgent: String(request.get('user-agent') ?? '').slice(0, 512),
+            ip: String(request.ip ?? '').slice(0, 64),
+          },
+        },
+        { upsert: true },
+      ).catch(() => {})
+    }
     return next()
   } catch (error) {
     // Log JWT-level errors in development so token issues are visible during debugging.

@@ -1,10 +1,16 @@
+import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { env } from '../config/env.js'
 
 export const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000
 
-export function createSessionToken(user) {
-  return jwt.sign({ sub: user.id, tokenVersion: user.tokenVersion }, env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' })
+// Generate a cryptographically random session identifier for JWT sid claim
+export function generateSid() {
+  return crypto.randomBytes(16).toString('hex')
+}
+
+export function createSessionToken(user, sid = generateSid()) {
+  return jwt.sign({ sub: user.id, tokenVersion: user.tokenVersion, sid }, env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' })
 }
 
 export function verifySessionToken(token) {
