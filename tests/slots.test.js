@@ -27,19 +27,23 @@ test('generateDaySlots produces the working window minus bookings and past times
 })
 
 test('today-aware generation drops past Dhaka slots only for the current date', () => {
-  const now = new Date()
-  const today = dhakaTodayKey(now)
-  void dhakaNowMinutes(now)
+  // Fixed "now" keeps this time-of-day independent; a live `new Date()` made
+  // this suite fail whenever it ran between 00:00 and 06:00 Dhaka time.
+  const fixedNow = new Date('2026-09-21T04:00:00Z') // 10:00 Asia/Dhaka
+  const today = dhakaTodayKey(fixedNow)
 
   const lateSlotHours = [
-    { dayOfWeek: weekdayOf(today), slots: [{ start: '06:00', end: '07:00' }, { start: '22:00', end: '23:00' }] },
+    { dayOfWeek: new Date(`${today}T00:00:00Z`).getUTCDay(), slots: [{ start: '06:00', end: '07:00' }, { start: '10:00', end: '11:00' }] },
   ]
-  function weekdayOf(dateKey) {
-    return new Date(`${dateKey}T00:00:00Z`).getUTCDay()
-  }
 
-  const todaySlots = generateDaySlots({ workingHours: lateSlotHours, dateKey: today, now })
-  // 06:00–07:00 Dhaka is always in the past or edge-adjacent relative to "now";
-  // 22:00+ is always future-or-edge for a same-day check made before 22:00.
-  assert.ok(todaySlots.every((slot) => slot >= '21:30'), `unexpected past slot kept: ${todaySlots}`)
+  const todaySlots = generateDaySlots({ workingHours: lateSlotHours, dateKey: today, now: fixedNow })
+  // 06:00 is behind the fixed 10:00 Dhaka "now" and must be dropped;
+  // a slot starting exactly at "now" is not bookable (strict future),
+  // so only 10:30 remains.
+  assert.deepEqual(todaySlots, ['10:30'])
+
+  // The same working window on a future date keeps everything.
+  const futureKey = dhakaTodayKey(new Date(fixedNow.getTime() + 7 * 24 * 60 * 60 * 1000))
+  const futureSlots = generateDaySlots({ workingHours: [{ dayOfWeek: new Date(`${futureKey}T00:00:00Z`).getUTCDay(), slots: [{ start: '06:00', end: '07:00' }] }], dateKey: futureKey, now: fixedNow })
+  assert.deepEqual(futureSlots, ['06:00', '06:30'])
 })
