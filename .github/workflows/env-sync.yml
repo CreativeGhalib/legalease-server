@@ -27,6 +27,20 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_BACKEND_PROJECT_ID }}
+          # Secrets must be statically mapped into env — dynamic lookup is not
+          # supported by GitHub Actions. Values are auto-masked in logs.
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          SSCOMMERZ_STORE_ID: ${{ secrets.SSCOMMERZ_STORE_ID }}
+          SSCOMMERZ_STORE_PASSWORD: ${{ secrets.SSCOMMERZ_STORE_PASSWORD }}
+          SSCOMMERZ_SANDBOX: ${{ secrets.SSCOMMERZ_SANDBOX }}
+          VONAGE_API_KEY: ${{ secrets.VONAGE_API_KEY }}
+          VONAGE_API_SECRET: ${{ secrets.VONAGE_API_SECRET }}
+          VONAGE_FROM_NUMBER: ${{ secrets.VONAGE_FROM_NUMBER }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           ENV_SPEC: >-
             EMAIL_HOST,
             EMAIL_PORT,
