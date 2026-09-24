@@ -122,7 +122,9 @@ test('account deletion grace period, lazy anonymization, and session revocation'
   assert.equal(finalizedProbe.status, 401)
   assert.equal(finalizedProbe.body.error.code, 'AUTHENTICATION_REQUIRED')
 
-  const anonymized = await User.findById(localUser._id).select('+passwordHash +deletionRequestedAt +pendingPhone +phoneOtpHash +phoneOtpExpiresAt +phoneOtpAttempts')
+  const anonymized = await User.findById(localUser._id)
+    .select('+passwordHash +deletionRequestedAt +pendingPhone +phoneOtpHash +phoneOtpExpiresAt +phoneOtpAttempts')
+    .lean()
   assert.match(anonymized.email, /^deleted\+.*@legalease\.invalid$/)
   assert.equal(anonymized.fullName, 'Deleted User')
   assert.equal(anonymized.profileImageUrl, '')

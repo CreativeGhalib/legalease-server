@@ -14,18 +14,20 @@ test('consultation booking prevents conflicts and honours lawyer-only completion
   process.env.JWT_SECRET = randomBytes(48).toString('hex')
   process.env.CLIENT_ORIGINS = origin
 
-  const [{ default: request }, mongoose, bcrypt, { default: app }, { User }, { LawyerProfile }] = await Promise.all([
+  const [{ default: request }, mongoose, bcrypt, { default: app }, { User }, { LawyerProfile }, { Appointment }] = await Promise.all([
     import('supertest'),
     import('mongoose'),
     import('bcrypt'),
     import('../src/app.js'),
     import('../src/models/User.js'),
     import('../src/models/LawyerProfile.js'),
+    import('../src/models/Appointment.js'),
   ])
 
   await mongoose.connect(testUri, { dbName: testDatabase })
   await User.init()
   await LawyerProfile.init()
+  await Appointment.init()
 
   const suffix = randomBytes(6).toString('hex')
   const emails = ['appt-lawyer', 'appt-client-a', 'appt-client-b'].map((local) => `${local}.${suffix}@legalease.test`)
@@ -35,6 +37,7 @@ test('consultation booking prevents conflicts and honours lawyer-only completion
   context.after(async () => {
     await User.deleteMany({ email: { $in: emails } })
     await LawyerProfile.deleteMany({})
+    await Appointment.deleteMany({})
     await mongoose.disconnect()
   })
 
@@ -121,8 +124,19 @@ test('consultation booking prevents conflicts and honours lawyer-only completion
     .patch(`/api/appointments/${firstBooking.body.data.appointment.id}/complete`)
     .set('Origin', origin)
     .set('Cookie', cookieLawyer)
-  assert.equal(complete.status, 200)
-  assert.equal(complete.body.data.status, 'completed')
+  assert.equal(complete.status, 409)
+  assert.equal(complete.body.error.code, 'APPOINTMENT_PAYMENT_REQUIRED')
+
+  await Appointment.updateOne(
+    { _id: firstBooking.body.data.appointment.id },
+    { $set: { paymentStatus: 'paid' } },
+  )
+  const paidComplete = await request(app)
+    .patch(`/api/appointments/${firstBooking.body.data.appointment.id}/complete`)
+    .set('Origin', origin)
+    .set('Cookie', cookieLawyer)
+  assert.equal(paidComplete.status, 200)
+  assert.equal(paidComplete.body.data.status, 'completed')
 
   const freedSlot = await request(app)
     .post('/api/appointments')
