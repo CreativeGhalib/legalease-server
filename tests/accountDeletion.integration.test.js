@@ -45,6 +45,16 @@ test('account deletion grace period, lazy anonymization, and session revocation'
   const [localUser, googleUser, revokeUser] = await Promise.all(emails.map((email) =>
     User.create({ fullName: `Delete ${email.split('.')[0]}`, email, passwordHash: email.includes('google') ? undefined : passwordHash, role: 'user', providers: email.includes('google') ? ['google'] : ['local'] }),
   ))
+  await User.updateOne({ _id: localUser._id }, {
+    $set: {
+      phone: `+88017${randomBytes(4).readUInt32BE().toString().slice(0, 8).padStart(8, '0')}`,
+      phoneVerified: true,
+      pendingPhone: '+8801800000000',
+      phoneOtpHash: 'pending-otp-hash',
+      phoneOtpExpiresAt: new Date(Date.now() + DAY),
+      phoneOtpAttempts: 2,
+    },
+  })
 
   function cookieFrom(response) {
     return decodeURIComponent(response.headers['set-cookie'][0].split(';')[0])
@@ -112,12 +122,18 @@ test('account deletion grace period, lazy anonymization, and session revocation'
   assert.equal(finalizedProbe.status, 401)
   assert.equal(finalizedProbe.body.error.code, 'AUTHENTICATION_REQUIRED')
 
-  const anonymized = await User.findById(localUser._id).select('+passwordHash +deletionRequestedAt')
+  const anonymized = await User.findById(localUser._id).select('+passwordHash +deletionRequestedAt +pendingPhone +phoneOtpHash +phoneOtpExpiresAt +phoneOtpAttempts')
   assert.match(anonymized.email, /^deleted\+.*@legalease\.invalid$/)
   assert.equal(anonymized.fullName, 'Deleted User')
   assert.equal(anonymized.profileImageUrl, '')
   assert.equal(anonymized.passwordHash, undefined)
   assert.equal(anonymized.googleSub, undefined)
+  assert.equal(anonymized.phone, undefined)
+  assert.equal(anonymized.phoneVerified, false)
+  assert.equal(anonymized.pendingPhone, undefined)
+  assert.equal(anonymized.phoneOtpHash, undefined)
+  assert.equal(anonymized.phoneOtpExpiresAt, undefined)
+  assert.equal(anonymized.phoneOtpAttempts, undefined)
   assert.equal(anonymized.status, 'deactivated')
 
   // Old JWT now fails (tokenVersion bump).

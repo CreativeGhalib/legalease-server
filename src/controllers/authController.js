@@ -1,9 +1,17 @@
 import crypto from 'node:crypto'
 import bcrypt from 'bcrypt'
 import { User } from '../models/User.js'
+import { UserSession } from '../models/UserSession.js'
 import { env } from '../config/env.js'
 import { logger } from '../config/logger.js'
-import { clearSessionCookie, createSessionToken, setSessionCookie, toSafeUser } from '../utils/auth.js'
+import {
+  clearSessionCookie,
+  createSessionToken,
+  readCookie,
+  setSessionCookie,
+  toSafeUser,
+  verifySessionToken,
+} from '../utils/auth.js'
 import { finalizeAccountDeletionIfDue } from '../utils/accountDeletion.js'
 import { sendPasswordResetEmail } from '../services/emailService.js'
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000
@@ -115,9 +123,27 @@ export async function getCurrentUser(request, response, next) {
   }
 }
 
-export function logout(_request, response) {
-  clearSessionCookie(response)
-  return response.status(200).json({ success: true, data: { message: 'Logged out successfully.' } })
+export async function logout(request, response, next) {
+  try {
+    const token = readCookie(request, env.COOKIE_NAME)
+    if (token) {
+      try {
+        const payload = verifySessionToken(token)
+        if (payload.sid) {
+          await UserSession.updateOne(
+            { sid: payload.sid, revokedAt: null },
+            { $set: { revokedAt: new Date(), lastSeen: new Date() } },
+          )
+        }
+      } catch {
+        // An invalid or expired token should not prevent the browser from clearing it.
+      }
+    }
+    clearSessionCookie(response)
+    return response.status(200).json({ success: true, data: { message: 'Logged out successfully.' } })
+  } catch (error) {
+    return next(error)
+  }
 }
 
 export async function forgotPassword(request, response, next) {

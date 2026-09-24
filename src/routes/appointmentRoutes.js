@@ -23,8 +23,8 @@ appointmentRouter.use(authenticate)
 appointmentRouter.post('/', authorizeRoles('user'), verifyOrigin, validate(createAppointmentSchema), createAppointment)
 appointmentRouter.get('/mine', listMyAppointments)
 appointmentRouter.get('/lawyer', authorizeRoles('lawyer'), listLawyerAppointments)
-appointmentRouter.patch('/:id/cancel', validateObjectId('id'), cancelAppointment)
-appointmentRouter.patch('/:id/complete', validateObjectId('id'), completeAppointment)
+appointmentRouter.patch('/:id/cancel', verifyOrigin, validateObjectId('id'), cancelAppointment)
+appointmentRouter.patch('/:id/complete', verifyOrigin, validateObjectId('id'), completeAppointment)
 
 // Paid consultation checkout (8-D) — user only, rate-limited
 appointmentRouter.post('/:id/checkout/stripe', validateObjectId('id'), authorizeRoles('user'), verifyOrigin, checkoutRateLimit, startAppointmentCheckoutStripe)

@@ -11,6 +11,7 @@ const userSessionSchema = new mongoose.Schema({
   userAgent: { type: String, default: '', maxlength: 512 },
   ip: { type: String, default: '', maxlength: 64 },
   lastSeen: { type: Date, default: Date.now },
+  revokedAt: { type: Date, default: null },
 }, { timestamps: true })
 
 userSessionSchema.index({ userId: 1, lastSeen: -1 })

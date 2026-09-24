@@ -5,14 +5,19 @@ import { LawyerProfile } from '../models/LawyerProfile.js'
 import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { User } from '../models/User.js'
 import { finalizeVerifiedHiringPayment } from './paymentService.js'
-import { acquireAppointmentTransaction, finalizeAppointmentPayment } from './appointmentPaymentService.js'
+import {
+  acquireAppointmentTransaction,
+  claimAppointmentCheckout,
+  finalizeAppointmentPayment,
+  releaseAppointmentCheckout,
+} from './appointmentPaymentService.js'
 
 function fail(message, statusCode, code) {
   return Object.assign(new Error(message), { statusCode, code })
 }
 
 function isConfigured() {
-  return Boolean(env.SSCOMMERZ_STORE_ID && env.SSCOMMERZ_STORE_PASSWORD)
+  return Boolean(env.SSCOMMERZ_STORE_ID && env.SSCOMMERZ_STORE_PASSWORD && env.SSCOMMERZ_USD_TO_BDT_RATE)
 }
 
 function baseUrl() {
@@ -21,7 +26,15 @@ function baseUrl() {
 }
 
 function clientBase() {
-  return env.clientOrigins[0]
+  return env.clientOrigins[0]?.replace(/\/$/, '')
+}
+
+function serverBase() {
+  return (env.SERVER_URL || clientBase()).replace(/\/$/, '')
+}
+
+function bdtAmountMinor(usdAmountMinor) {
+  return Math.round(usdAmountMinor * env.SSCOMMERZ_USD_TO_BDT_RATE)
 }
 
 async function acquireHiringTransaction(user, requestId) {
@@ -71,18 +84,19 @@ export async function initiateSslcommerzHiringCheckout(user, requestId) {
   if (!isConfigured()) throw fail('Local payments are not configured yet.', 503, 'SSLCOMMERZ_UNAVAILABLE')
 
   const { hiringRequest, transaction } = await acquireHiringTransaction(user, requestId)
+  const gatewayAmountMinor = bdtAmountMinor(transaction.amountMinor)
 
   const tranId = `LE-${crypto.randomBytes(8).toString('hex').toUpperCase()}`
   const payload = new URLSearchParams({
     store_id: env.SSCOMMERZ_STORE_ID,
     store_passwd: env.SSCOMMERZ_STORE_PASSWORD,
-    total_amount: (hiringRequest.feeMinorSnapshot / 100).toFixed(2),
+    total_amount: (gatewayAmountMinor / 100).toFixed(2),
     currency: 'BDT',
     tran_id: tranId,
     success_url: `${clientBase()}/payment/sslcommerz/success?txn=${transaction.id}`,
     fail_url: `${clientBase()}/payment/sslcommerz/fail?txn=${transaction.id}`,
     cancel_url: `${clientBase()}/payment/sslcommerz/cancel?txn=${transaction.id}`,
-    ipn_url: `${clientBase()}/api/payments/sslcommerz/ipn`,
+    ipn_url: `${serverBase()}/api/payments/sslcommerz/ipn`,
     cus_name: payerName(user),
     cus_email: user.email,
     cus_add1: 'Dhaka',
@@ -115,7 +129,7 @@ export async function initiateSslcommerzHiringCheckout(user, requestId) {
 
   await PaymentTransaction.updateOne(
     { _id: transaction.id, status: { $ne: 'paid' } },
-    { $set: { gateway: 'sslcommerz', gatewayTranId: tranId } },
+    { $set: { gateway: 'sslcommerz', gatewayTranId: tranId, gatewayAmountMinor, gatewayCurrency: 'bdt' } },
   )
 
   return { transactionId: transaction.id, redirectUrl: gatewayResponse.GatewayPageURL }
@@ -158,8 +172,19 @@ export async function handleSslcommerzIpn(ipnPayload) {
     throw fail('IPN does not match a pending LegalEase payment.', 400, 'INVALID_IPN')
   }
 
-  const expectedAmount = (transaction.amountMinor / 100).toFixed(2)
-  if (Number(amount) !== Number(expectedAmount) || String(currency).toUpperCase() !== 'BDT') {
+  const expectedAmount = transaction.gatewayAmountMinor
+    ? (transaction.gatewayAmountMinor / 100).toFixed(2)
+    : null
+  const callbackCurrency = String(currency).toLowerCase()
+  const validatedCurrency = String(validation.currency ?? currency).toLowerCase()
+  const validatedAmount = validation.amount ?? amount
+  if (
+    !expectedAmount ||
+    Number(amount) !== Number(expectedAmount) ||
+    Number(validatedAmount) !== Number(expectedAmount) ||
+    callbackCurrency !== transaction.gatewayCurrency ||
+    validatedCurrency !== transaction.gatewayCurrency
+  ) {
     throw fail('IPN amount does not match the stored obligation.', 400, 'INVALID_IPN')
   }
 
@@ -171,7 +196,10 @@ export async function handleSslcommerzIpn(ipnPayload) {
 
   if (transaction.type === 'appointment_fee') {
     await finalizeAppointmentPayment(transaction)
-    await PaymentTransaction.updateOne({ _id: transaction._id }, { $set: { gatewayValId: valId } })
+    await PaymentTransaction.updateOne(
+      { _id: transaction._id },
+      { $set: { gatewayValId: valId, gatewayBankTranId: validation.bank_tran_id ?? null } },
+    )
     return { fulfilled: true, transactionId: String(transaction._id) }
   }
 
@@ -184,6 +212,7 @@ export async function handleSslcommerzIpn(ipnPayload) {
     transaction,
     request: hiringRequest,
     gatewayValId: valId,
+    gatewayBankTranId: validation.bank_tran_id ?? null,
     withCommission: true,
   })
 
@@ -193,20 +222,21 @@ export async function handleSslcommerzIpn(ipnPayload) {
 export async function initiateSslcommerzAppointmentCheckout(user, appointmentId) {
   if (!isConfigured()) throw fail('Local payments are not configured yet.', 503, 'SSLCOMMERZ_UNAVAILABLE')
 
-  const { acquireAppointmentTransaction } = await import('./appointmentPaymentService.js')
   const { appointment, transaction } = await acquireAppointmentTransaction(user, appointmentId)
+  const claimed = await claimAppointmentCheckout(appointment, transaction, 'sslcommerz')
+  const gatewayAmountMinor = bdtAmountMinor(claimed.amountMinor)
 
   const tranId = `LE-A-${crypto.randomBytes(8).toString('hex').toUpperCase()}`
   const payload = new URLSearchParams({
     store_id: env.SSCOMMERZ_STORE_ID,
     store_passwd: env.SSCOMMERZ_STORE_PASSWORD,
-    total_amount: (appointment.amountMinor / 100).toFixed(2),
+    total_amount: (gatewayAmountMinor / 100).toFixed(2),
     currency: 'BDT',
     tran_id: tranId,
     success_url: `${clientBase()}/payment/appointment/success?txn=${transaction.id}`,
     fail_url: `${clientBase()}/payment/appointment/fail?txn=${transaction.id}`,
     cancel_url: `${clientBase()}/payment/appointment/cancel?txn=${transaction.id}`,
-    ipn_url: `${clientBase()}/api/payments/sslcommerz/ipn`,
+    ipn_url: `${serverBase()}/api/payments/sslcommerz/ipn`,
     cus_name: payerName(user),
     cus_email: user.email,
     cus_add1: 'Dhaka',
@@ -230,17 +260,20 @@ export async function initiateSslcommerzAppointmentCheckout(user, appointmentId)
     })
     gatewayResponse = await apiResponse.json().catch(() => null)
   } catch (cause) {
+    await releaseAppointmentCheckout(appointment._id, claimed)
     throw fail('The local payment gateway could not be reached. Please try again shortly.', 502, 'GATEWAY_UNAVAILABLE')
   }
 
   if (!gatewayResponse?.GatewayPageURL) {
+    await releaseAppointmentCheckout(appointment._id, claimed)
     throw fail('The local payment gateway rejected this session. Please try again shortly.', 502, 'GATEWAY_SESSION_FAILED')
   }
 
-  await PaymentTransaction.updateOne(
-    { _id: transaction._id, status: 'pending' },
-    { $set: { gateway: 'sslcommerz', gatewayTranId: tranId, feeGateway: 'sslcommerz' } },
-  )
+  await releaseAppointmentCheckout(appointment._id, claimed, {
+    gatewayTranId: tranId,
+    gatewayAmountMinor,
+    gatewayCurrency: 'bdt',
+  })
 
-  return { transactionId: transaction.id, redirectUrl: gatewayResponse.GatewayPageURL }
+  return { transactionId: claimed.id, redirectUrl: gatewayResponse.GatewayPageURL }
 }

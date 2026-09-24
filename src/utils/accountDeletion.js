@@ -11,11 +11,25 @@ function anonymizeSet(userId) {
     email: `deleted+${String(userId)}@legalease.invalid`,
     profileImageUrl: '',
     status: 'deactivated',
+    phoneVerified: false,
+    failedLoginAttempts: 0,
   }
 }
 
 function anonymizeUnset() {
-  return { googleSub: '', passwordHash: '', deletionRequestedAt: '' }
+  return {
+    googleSub: '',
+    passwordHash: '',
+    deletionRequestedAt: '',
+    phone: '',
+    pendingPhone: '',
+    phoneOtpHash: '',
+    phoneOtpExpiresAt: '',
+    phoneOtpAttempts: '',
+    passwordResetToken: '',
+    passwordResetExpires: '',
+    accountLockedUntil: '',
+  }
 }
 
 /**

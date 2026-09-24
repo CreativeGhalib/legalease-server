@@ -14,6 +14,10 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
   process.env.MONGODB_DB_NAME = testDatabase
   process.env.JWT_SECRET = randomBytes(48).toString('hex')
   process.env.CLIENT_ORIGINS = origin
+  process.env.SSCOMMERZ_STORE_ID = 'refund-test-store'
+  process.env.SSCOMMERZ_STORE_PASSWORD = 'refund-test-password'
+  process.env.SSCOMMERZ_USD_TO_BDT_RATE = '110'
+  process.env.SSCOMMERZ_SANDBOX = 'true'
 
   const [{ default: request }, mongoose, bcrypt, { default: app }, { User }, { LawyerProfile }, { HiringRequest }, { PaymentTransaction }] = await Promise.all([
     import('supertest'),
@@ -38,7 +42,33 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
   const sharedPassword = randomBytes(16).toString('base64url')
   const passwordHash = await bcrypt.hash(sharedPassword, 12)
   await User.deleteMany({ email: { $in: emails } })
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(String(url))
+    if (!parsed.pathname.endsWith('/merchantTransIDvalidationAPI.php')) {
+      throw new Error(`Unexpected fetch ${url}`)
+    }
+    if (parsed.searchParams.has('refund_ref_id')) {
+      return {
+        ok: true,
+        json: async () => ({
+          APIConnect: 'DONE',
+          status: 'refunded',
+          refund_ref_id: parsed.searchParams.get('refund_ref_id'),
+        }),
+      }
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        APIConnect: 'DONE',
+        status: 'success',
+        refund_ref_id: `REF-${suffix}`,
+      }),
+    }
+  }
   context.after(async () => {
+    globalThis.fetch = originalFetch
     await User.deleteMany({ email: { $in: emails } })
     await LawyerProfile.deleteMany({})
     await HiringRequest.deleteMany({})
@@ -91,6 +121,11 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
       lawyerProfileId: profile.id,
       hiringRequestId: engagement._id,
       stripeCheckoutSessionId: `cs_test_${randomBytes(10).toString('hex')}`,
+      gateway: 'sslcommerz',
+      gatewayTranId: `LE-${randomBytes(8).toString('hex')}`,
+      gatewayBankTranId: `BANK-${randomBytes(8).toString('hex')}`,
+      gatewayAmountMinor: engagement.feeMinorSnapshot * 110,
+      gatewayCurrency: 'bdt',
       amountMinor: engagement.feeMinorSnapshot,
       currency: 'usd',
       status: 'paid',
@@ -190,11 +225,20 @@ test('disputes block release, resolve via admin refund/release, and stay race-pr
     .send({ outcome: 'release', note: 'ok' })
   assert.equal(shortNote.status, 400)
 
-  const resolvedRefund = await request(app)
+  const pendingRefund = await request(app)
     .patch(`/api/admin/disputes/${opened.body.data.dispute.id}/resolve`)
     .set('Origin', origin)
     .set('Cookie', cookieAdmin)
     .send({ outcome: 'refund', note: 'Verified non-delivery; full refund issued to the client.' })
+  assert.equal(pendingRefund.status, 202)
+  assert.equal(pendingRefund.body.data.dispute.status, 'open')
+  assert.equal(pendingRefund.body.data.refundStatus, 'pending')
+
+  const resolvedRefund = await request(app)
+    .patch(`/api/admin/disputes/${opened.body.data.dispute.id}/resolve`)
+    .set('Origin', origin)
+    .set('Cookie', cookieAdmin)
+    .send({ outcome: 'refund', note: 'Verified non-delivery; provider refund status confirmed.' })
   assert.equal(resolvedRefund.status, 200)
   assert.equal(resolvedRefund.body.data.dispute.status, 'resolved_refund')
 

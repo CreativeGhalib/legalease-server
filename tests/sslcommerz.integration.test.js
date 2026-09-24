@@ -15,6 +15,7 @@ test('SSLCommerz checkout initiates, verifies via IPN, and books escrow commissi
   process.env.CLIENT_ORIGINS = origin
   process.env.SSCOMMERZ_STORE_ID = 'legalease_test_store'
   process.env.SSCOMMERZ_STORE_PASSWORD = 'test_password'
+  process.env.SSCOMMERZ_USD_TO_BDT_RATE = '110'
   process.env.SSCOMMERZ_SANDBOX = 'true'
 
   const [{ default: request }, mongoose, bcrypt, { default: app }, { User }, { LawyerProfile }, { HiringRequest }, { PaymentTransaction }, { resetStatsCache }] = await Promise.all([
@@ -119,6 +120,8 @@ test('SSLCommerz checkout initiates, verifies via IPN, and books escrow commissi
   assert.equal(storedTxn.escrowStatus, null)
   assert.equal(storedTxn.platformCommissionMinor, null)
   assert.equal(storedTxn.amountMinor, 22000)
+  assert.equal(storedTxn.gatewayAmountMinor, 2420000)
+  assert.equal(storedTxn.gatewayCurrency, 'bdt')
 
   // Gateway lock protects against mixed-gateway double payment.
   await PaymentTransaction.updateOne(
@@ -148,7 +151,7 @@ test('SSLCommerz checkout initiates, verifies via IPN, and books escrow commissi
   const validIpn = await request(app)
     .post('/api/payments/sslcommerz/ipn')
     .type('form')
-    .send({ ...ipnBase, amount: '220.00' })
+    .send({ ...ipnBase, amount: '24200.00' })
   assert.equal(validIpn.status, 200)
 
   const paidTxn = await PaymentTransaction.findById(storedTxn._id)
@@ -167,7 +170,7 @@ test('SSLCommerz checkout initiates, verifies via IPN, and books escrow commissi
   const replay = await request(app)
     .post('/api/payments/sslcommerz/ipn')
     .type('form')
-    .send({ ...ipnBase, amount: '220.00' })
+    .send({ ...ipnBase, amount: '24200.00' })
   assert.equal(replay.status, 200)
   const afterReplay = await PaymentTransaction.findById(storedTxn._id)
   assert.equal(afterReplay.status, 'paid')

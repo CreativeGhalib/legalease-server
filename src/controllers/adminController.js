@@ -499,8 +499,14 @@ export async function listDisputes(req, res, next) {
 
 export async function resolveDispute(req, res, next) {
   try {
-    const closed = await resolveDisputeService(req.auth.user, req.params.id, req.body)
-    res.json({ success: true, data: { dispute: { id: String(closed._id), status: closed.status } } })
+    const result = await resolveDisputeService(req.auth.user, req.params.id, req.body)
+    res.status(result.refundStatus === 'pending' ? 202 : 200).json({
+      success: true,
+      data: {
+        dispute: { id: String(result.dispute._id), status: result.dispute.status },
+        refundStatus: result.refundStatus,
+      },
+    })
   } catch (error) {
     next(error)
   }
@@ -517,8 +523,16 @@ export async function releaseEscrowOverride(req, res, next) {
 
 export async function refundTransactionOverride(req, res, next) {
   try {
-    const updated = await adminRefundTransaction(req.auth.user, req.params.id, req.body.note)
-    res.json({ success: true, data: { id: String(updated._id), status: updated.status, escrowStatus: updated.escrowStatus } })
+    const result = await adminRefundTransaction(req.auth.user, req.params.id, req.body.note)
+    res.status(result.pending ? 202 : 200).json({
+      success: true,
+      data: {
+        id: String(result.transaction._id),
+        status: result.transaction.status,
+        escrowStatus: result.transaction.escrowStatus,
+        refundStatus: result.transaction.refundStatus,
+      },
+    })
   } catch (error) {
     next(error)
   }
@@ -558,8 +572,14 @@ export async function listTransactions(req, res, next) {
             : null,
           amountMinor: transaction.amountMinor,
           currency: transaction.currency,
+          gateway: transaction.gateway,
+          gatewayAmountMinor: transaction.gatewayAmountMinor ?? null,
+          gatewayCurrency: transaction.gatewayCurrency ?? null,
           status: transaction.status,
           escrowStatus: transaction.escrowStatus ?? null,
+          refundStatus: transaction.refundStatus ?? null,
+          gatewayRefundId: transaction.gatewayRefundId ?? null,
+          refundedAt: transaction.refundedAt ?? null,
           hiringRequestId: transaction.hiringRequestId ? String(transaction.hiringRequestId) : null,
           createdAt: transaction.createdAt,
           paidAt: transaction.paidAt,
@@ -598,6 +618,9 @@ export async function exportTransactionsCsv(req, res, next) {
       transaction.lawyerId?.fullName || '',
       transaction.amountMinor,
       transaction.currency,
+      transaction.gateway,
+      transaction.gatewayAmountMinor ?? '',
+      transaction.gatewayCurrency ?? '',
       transaction.status,
       transaction.createdAt ? new Date(transaction.createdAt).toISOString() : '',
       transaction.paidAt ? new Date(transaction.paidAt).toISOString() : '',
@@ -606,7 +629,7 @@ export async function exportTransactionsCsv(req, res, next) {
     return sendCsvResponse(
       res,
       'transactions',
-      ['id', 'type', 'payerName', 'lawyerName', 'amountMinor', 'currency', 'status', 'createdAt', 'paidAt', 'hiringRequestId'],
+      ['id', 'type', 'payerName', 'lawyerName', 'amountMinor', 'currency', 'gateway', 'gatewayAmountMinor', 'gatewayCurrency', 'status', 'createdAt', 'paidAt', 'hiringRequestId'],
       rows,
     )
   } catch (error) {

@@ -32,10 +32,11 @@ test('rate limit store instances satisfy the express-rate-limit v8 contract with
     assert.equal(auth.localKeys, false)
     assert.equal(mongoRateLimitStore('auth', 15 * 60 * 1000), undefined)
 
-    await assert.deepEqual(
-      await new RateLimitMongoStore({ windowMs: 60_000, prefix: 'probe' }).increment('probe-key'),
-      { totalHits: 1 },
-    )
+    const beforeIncrement = Date.now()
+    const incrementResult = await new RateLimitMongoStore({ windowMs: 60_000, prefix: 'probe' }).increment('probe-key')
+    assert.equal(incrementResult.totalHits, 1)
+    assert.ok(incrementResult.resetTime instanceof Date)
+    assert.ok(incrementResult.resetTime.getTime() >= beforeIncrement + 60_000)
     assert.equal(RATE_LIMIT_COLLECTION, 'rateLimits')
     for (const prefix of ['auth', 'authStrict', 'api', 'upload', 'uploadMutation', 'checkout', 'adminMutation']) {
       assert.match(prefix, /^[a-zA-Z]+$/)

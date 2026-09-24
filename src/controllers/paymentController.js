@@ -21,6 +21,7 @@ import { handleSslcommerzIpn, initiateSslcommerzHiringCheckout } from '../servic
 import { resolveEngagementFor } from './caseTrackerController.js'
 import { createNotification } from '../services/notificationService.js'
 import { logAudit, AUDIT_ACTIONS } from '../services/auditService.js'
+import { reconcileStripeRefund } from '../services/refundService.js'
 
 const COMPLETION_CONFIRM_GRACE_MS = 24 * 60 * 60 * 1000
 
@@ -245,7 +246,7 @@ export async function listMyPayments(request, response, next) {
 
     const items = await PaymentTransaction.find(filter)
       .sort({ createdAt: -1, _id: -1 })
-      .select('type amountMinor currency status paidAt createdAt hiringRequestId payerId lawyerId escrowStatus releaseReason releasedAt')
+      .select('type amountMinor currency status paidAt createdAt hiringRequestId payerId lawyerId gateway gatewayAmountMinor gatewayCurrency escrowStatus releaseReason releasedAt refundStatus refundAmountMinor refundedAt')
       .lean()
 
     const partyIds = [...new Set(items.flatMap((item) => [String(item.payerId), String(item.lawyerId)]))]
@@ -268,6 +269,9 @@ export async function listMyPayments(request, response, next) {
           type: item.type,
           amountMinor: item.amountMinor,
           currency: item.currency,
+          gateway: item.gateway,
+          gatewayAmountMinor: item.gatewayAmountMinor ?? null,
+          gatewayCurrency: item.gatewayCurrency ?? null,
           status: item.status,
           paidAt: item.paidAt,
           createdAt: item.createdAt,
@@ -275,6 +279,9 @@ export async function listMyPayments(request, response, next) {
           escrowStatus: item.escrowStatus ?? null,
           releaseReason: item.releaseReason ?? null,
           releasedAt: item.releasedAt ?? null,
+          refundStatus: item.refundStatus ?? null,
+          refundAmountMinor: item.refundAmountMinor ?? null,
+          refundedAt: item.refundedAt ?? null,
           payerName: nameById.get(String(item.payerId)) ?? null,
           lawyerName: nameById.get(String(item.lawyerId)) ?? null,
           engagementSpecialization:
@@ -316,6 +323,10 @@ export async function stripeWebhook(request, response, next) {
 
     if (event.type === 'checkout.session.expired') {
       await resetExpiredCheckout(event.data.object)
+    }
+
+    if (['refund.created', 'refund.updated', 'refund.failed'].includes(event.type)) {
+      await reconcileStripeRefund(event.data.object)
     }
 
     return response.json({ received: true })

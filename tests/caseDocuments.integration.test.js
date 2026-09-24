@@ -103,11 +103,12 @@ test('case evidence vault is party-scoped, paid-gated, capped, and permission-ch
   const outsiderCookie = await cookieFor(outsider)
   const unpaidCookie = await cookieFor(unpaidClient)
   const lawyerCookie = await cookieFor(lawyer)
+  const validPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
   const unauthUpload = await request(app)
     .post(`/api/cases/${paidEngagement._id}/documents`)
     .set('Origin', origin)
-    .attach('image', Buffer.from([0x89, 0x50]), { filename: 'a.png', contentType: 'image/png' })
+    .attach('image', validPng, { filename: 'a.png', contentType: 'image/png' })
   assert.equal(unauthUpload.status, 401)
 
   // Outsider is not a party — privacy-safe 404.
@@ -115,7 +116,7 @@ test('case evidence vault is party-scoped, paid-gated, capped, and permission-ch
     .post(`/api/cases/${paidEngagement._id}/documents`)
     .set('Origin', origin)
     .set('Cookie', outsiderCookie)
-    .attach('image', Buffer.from([0x89, 0x50]), { filename: 'b.png', contentType: 'image/png' })
+    .attach('image', validPng, { filename: 'b.png', contentType: 'image/png' })
   assert.equal(outsiderUpload.status, 404)
 
   // Unpaid engagement is gated.
@@ -124,7 +125,7 @@ test('case evidence vault is party-scoped, paid-gated, capped, and permission-ch
     .post(`/api/cases/${unpaidEngagement._id}/documents`)
     .set('Origin', origin)
     .set('Cookie', unpaidCookie)
-    .attach('image', Buffer.from([0x89, 0x50]), { filename: 'c.png', contentType: 'image/png' })
+    .attach('image', validPng, { filename: 'c.png', contentType: 'image/png' })
   assert.equal(unpaidAttempt.status, 403)
   assert.equal(unpaidAttempt.body.error.code, 'CASE_NOT_ELIGIBLE')
 
@@ -138,11 +139,20 @@ test('case evidence vault is party-scoped, paid-gated, capped, and permission-ch
   assert.equal(badMime.status, 400)
   assert.equal(uploadCount, uploadsBeforeMimeCheck)
 
+  const forgedImage = await request(app)
+    .post(`/api/cases/${paidEngagement._id}/documents`)
+    .set('Origin', origin)
+    .set('Cookie', clientCookie)
+    .attach('image', Buffer.from('%PDF-1.4 fake'), { filename: 'forged.png', contentType: 'image/png' })
+  assert.equal(forgedImage.status, 400)
+  assert.equal(forgedImage.body.error.code, 'INVALID_IMAGE_CONTENT')
+  assert.equal(uploadCount, uploadsBeforeMimeCheck)
+
   const happy = await request(app)
     .post(`/api/cases/${paidEngagement._id}/documents`)
     .set('Origin', origin)
     .set('Cookie', clientCookie)
-    .attach('image', Buffer.from([0x89, 0x50, 0x49, 0x46]), { filename: 'evidence-one.png', contentType: 'image/png' })
+    .attach('image', validPng, { filename: 'evidence-one.png', contentType: 'image/png' })
   assert.equal(happy.status, 201)
   assert.match(happy.body.data.document.imageUrl, /^https:\/\/i\.ibb\.co\//)
   assert.equal(happy.body.data.document.uploadedByMe, true)
@@ -174,7 +184,7 @@ test('case evidence vault is party-scoped, paid-gated, capped, and permission-ch
     .post(`/api/cases/${paidEngagement._id}/documents`)
     .set('Origin', origin)
     .set('Cookie', clientCookie)
-    .attach('image', Buffer.from([0x89, 0x50]), { filename: 'over.png', contentType: 'image/png' })
+    .attach('image', validPng, { filename: 'over.png', contentType: 'image/png' })
   assert.equal(capReached.status, 409)
   assert.equal(capReached.body.error.code, 'DOCUMENT_LIMIT_REACHED')
 

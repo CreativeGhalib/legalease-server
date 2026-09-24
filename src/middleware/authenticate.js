@@ -17,11 +17,14 @@ export async function authenticate(request, _response, next) {
     const payload = verifySessionToken(token)
     const user = await User.findById(payload.sub)
     if (!user || user.status !== 'active' || user.tokenVersion !== payload.tokenVersion) throw sessionError()
-    request.auth = { user, sid: payload.sid ?? null }
-    // Fire-and-forget session tracking — never blocks the request (6-H)
+
     if (payload.sid) {
-      UserSession.updateOne(
-        { sid: payload.sid },
+      const trackedSession = await UserSession.findOne({ sid: payload.sid }).select('userId revokedAt').lean()
+      if (trackedSession?.revokedAt || (trackedSession && String(trackedSession.userId) !== String(user._id))) {
+        throw sessionError()
+      }
+      await UserSession.updateOne(
+        { sid: payload.sid, revokedAt: null },
         {
           $set: {
             userId: user._id,
@@ -31,8 +34,9 @@ export async function authenticate(request, _response, next) {
           },
         },
         { upsert: true },
-      ).catch(() => {})
+      )
     }
+    request.auth = { user, sid: payload.sid ?? null }
     return next()
   } catch (error) {
     // Log JWT-level errors in development so token issues are visible during debugging.

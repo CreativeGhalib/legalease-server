@@ -16,7 +16,7 @@ on:
 
 jobs:
   sync:
-    name: Sync EMAIL_*/VONAGE_*/SENTRY to Vercel prod env
+    name: Sync backend runtime environment to Vercel prod
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -34,9 +34,11 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          SERVER_URL: ${{ secrets.SERVER_URL }}
           SSCOMMERZ_STORE_ID: ${{ secrets.SSCOMMERZ_STORE_ID }}
           SSCOMMERZ_STORE_PASSWORD: ${{ secrets.SSCOMMERZ_STORE_PASSWORD }}
           SSCOMMERZ_SANDBOX: ${{ secrets.SSCOMMERZ_SANDBOX }}
+          SSCOMMERZ_USD_TO_BDT_RATE: ${{ secrets.SSCOMMERZ_USD_TO_BDT_RATE }}
           VONAGE_API_KEY: ${{ secrets.VONAGE_API_KEY }}
           VONAGE_API_SECRET: ${{ secrets.VONAGE_API_SECRET }}
           VONAGE_FROM_NUMBER: ${{ secrets.VONAGE_FROM_NUMBER }}
@@ -47,9 +49,11 @@ jobs:
             EMAIL_USER,
             EMAIL_PASS,
             EMAIL_FROM,
+            SERVER_URL,
             SSCOMMERZ_STORE_ID,
             SSCOMMERZ_STORE_PASSWORD,
             SSCOMMERZ_SANDBOX,
+            SSCOMMERZ_USD_TO_BDT_RATE,
             VONAGE_API_KEY,
             VONAGE_API_SECRET,
             VONAGE_FROM_NUMBER,

@@ -30,7 +30,7 @@ export function clearSessionCookie(response) {
 }
 
 function googleOnboardingCookieOptions() {
-  return { ...sessionCookieOptions(), path: '/api/auth/google' }
+  return { ...sessionCookieOptions(), path: '/api' }
 }
 
 export function setGoogleOnboardingCookie(response, token) {
@@ -42,6 +42,7 @@ export function setGoogleOnboardingCookie(response, token) {
 
 export function clearGoogleOnboardingCookie(response) {
   response.clearCookie(env.GOOGLE_ONBOARDING_COOKIE_NAME, googleOnboardingCookieOptions())
+  response.clearCookie(env.GOOGLE_ONBOARDING_COOKIE_NAME, { ...sessionCookieOptions(), path: '/api/auth/google' })
 }
 
 export function readCookie(request, name) {

@@ -25,7 +25,9 @@ export async function acquireAppointmentTransaction(user, appointmentId) {
   }
 
   const profile = await LawyerProfile.findById(appointment.lawyerProfileId)
-  const lawyer = await User.findOne({ _id: appointment.lawyerId, role: 'lawyer', status: 'active' })
+  const lawyer = profile
+    ? await User.findOne({ _id: profile.userId, role: 'lawyer', status: 'active' })
+    : null
   if (!profile || !lawyer || ['suspended', 'deleted'].includes(profile.publicationStatus)) {
     throw fail('This consultation payment is unavailable.', 403, 'APPOINTMENT_PAYMENT_UNAVAILABLE')
   }
@@ -58,6 +60,52 @@ export async function acquireAppointmentTransaction(user, appointmentId) {
   return { appointment, transaction, lawyer }
 }
 
+export async function claimAppointmentCheckout(appointment, transaction, gateway) {
+  const lockedToStripe = gateway === 'sslcommerz' && transaction.gateway === 'stripe' && transaction.stripeCheckoutSessionId
+  const lockedToSslcommerz = gateway === 'stripe' && transaction.gateway === 'sslcommerz' && transaction.gatewayTranId
+  if (lockedToStripe || lockedToSslcommerz) {
+    throw fail('Continue with the payment gateway already selected for this appointment.', 409, 'PAYMENT_GATEWAY_LOCKED')
+  }
+
+  const claimed = await PaymentTransaction.findOneAndUpdate(
+    {
+      _id: transaction._id,
+      status: 'pending',
+      checkoutCreating: { $ne: true },
+      checkoutAttempt: transaction.checkoutAttempt,
+    },
+    { $set: { checkoutCreating: true, gateway }, $inc: { checkoutAttempt: 1 } },
+    { new: true },
+  )
+  if (!claimed) throw fail('Checkout is being prepared. Please try again shortly.', 409, 'CHECKOUT_IN_PROGRESS')
+
+  const held = await Appointment.updateOne(
+    { _id: appointment._id, status: 'scheduled', paymentStatus: 'unpaid' },
+    { $set: { checkoutCreating: true, feeGateway: gateway } },
+  )
+  if (held.matchedCount === 0) {
+    await PaymentTransaction.updateOne(
+      { _id: claimed._id, checkoutAttempt: claimed.checkoutAttempt },
+      { $set: { checkoutCreating: false } },
+    )
+    throw fail('This appointment is already closed or paid.', 409, 'APPOINTMENT_ALREADY_CLOSED')
+  }
+  return claimed
+}
+
+export async function releaseAppointmentCheckout(appointmentId, transaction, transactionUpdate = {}) {
+  await Promise.all([
+    PaymentTransaction.updateOne(
+      { _id: transaction._id, checkoutAttempt: transaction.checkoutAttempt },
+      { $set: { ...transactionUpdate, checkoutCreating: false } },
+    ),
+    Appointment.updateOne(
+      { _id: appointmentId },
+      { $set: { checkoutCreating: false, feeGateway: transaction.gateway } },
+    ),
+  ])
+}
+
 /**
  * Verified-callback finalizer for appointment fees. Conditional updates make
  * replays exactly-once; commission split mirrors hiring doctrine.
@@ -68,6 +116,7 @@ export async function finalizeAppointmentPayment(transaction) {
     {
       $set: {
         status: 'paid',
+        paidAt: transaction.paidAt ?? new Date(),
         escrowStatus: 'held',
         platformCommissionMinor: Math.round(transaction.amountMinor * 0.15),
         lawyerPayoutMinor: transaction.amountMinor - Math.round(transaction.amountMinor * 0.15),
@@ -77,18 +126,21 @@ export async function finalizeAppointmentPayment(transaction) {
     { new: true },
   )
 
+  const paidTxn = updatedTxn ?? await PaymentTransaction.findOne({ _id: transaction._id, status: 'paid' })
+  if (!paidTxn) return { alreadyApplied: true }
+
   const updatedAppointment = await Appointment.findOneAndUpdate(
-    { _id: transaction.appointmentId, paymentStatus: 'unpaid' },
-    { $set: { paymentStatus: 'paid' } },
+    { _id: transaction.appointmentId, status: 'scheduled', paymentStatus: 'unpaid' },
+    { $set: { paymentStatus: 'paid', checkoutCreating: false, feeGateway: paidTxn.gateway } },
     { new: true },
   )
 
-  if (!updatedTxn || !updatedAppointment) return { alreadyApplied: true }
+  if (!updatedAppointment) return { alreadyApplied: !updatedTxn }
 
   try {
     const [client, lawyer] = await Promise.all([
       User.findById(updatedAppointment.userId).select('_id fullName email'),
-      User.findById(updatedAppointment.lawyerId).select('_id fullName email'),
+      User.findById(paidTxn.lawyerId).select('_id fullName email'),
     ])
     if (client) {
       await createNotification({
@@ -130,6 +182,17 @@ export async function cancelUnpaidAppointmentHolds(filterBase = {}) {
 
   let cancelled = 0
   for (const doc of due) {
+    const pendingCheckout = await PaymentTransaction.exists({
+      appointmentId: doc._id,
+      type: 'appointment_fee',
+      status: 'pending',
+      $or: [
+        { stripeCheckoutSessionId: { $exists: true, $ne: null } },
+        { gatewayTranId: { $exists: true, $ne: null } },
+      ],
+    })
+    if (pendingCheckout) continue
+
     const updated = await Appointment.findOneAndUpdate(
       { _id: doc._id, status: 'scheduled', paymentStatus: 'unpaid', checkoutCreating: { $ne: true } },
       { $set: { status: 'cancelled' } },

@@ -38,10 +38,12 @@ export class RateLimitMongoStore {
   }
 
   async increment(key) {
+    const fallbackResetTime = new Date(Date.now() + this.windowMs)
+
     try {
       await this.init()
       const collection = this.collection()
-      if (!collection) return { totalHits: 1 }
+      if (!collection) return { totalHits: 1, resetTime: fallbackResetTime }
 
       const now = new Date()
       const live = await collection.findOneAndUpdate(
@@ -72,7 +74,7 @@ export class RateLimitMongoStore {
       }
     } catch (error) {
       logger.error('Rate limit store increment failed; allowing request.', { error: error.message, prefix: this.prefix })
-      return { totalHits: 1 }
+      return { totalHits: 1, resetTime: fallbackResetTime }
     }
   }
 

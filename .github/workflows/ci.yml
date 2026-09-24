@@ -82,6 +82,7 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_ONBOARDING_SECRET: ${{ secrets.GOOGLE_ONBOARDING_SECRET }}
           CLIENT_ORIGINS: ${{ secrets.CLIENT_ORIGINS }}
+          SERVER_URL: ${{ secrets.SERVER_URL }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_CURRENCY: ${{ secrets.STRIPE_CURRENCY }}
@@ -97,6 +98,7 @@ jobs:
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           SSCOMMERZ_STORE_ID: ${{ secrets.SSCOMMERZ_STORE_ID }}
           SSCOMMERZ_STORE_PASSWORD: ${{ secrets.SSCOMMERZ_STORE_PASSWORD }}
+          SSCOMMERZ_USD_TO_BDT_RATE: ${{ secrets.SSCOMMERZ_USD_TO_BDT_RATE }}
           SSCOMMERZ_SANDBOX: ${{ secrets.SSCOMMERZ_SANDBOX }}
           VONAGE_API_KEY: ${{ secrets.VONAGE_API_KEY }}
           VONAGE_API_SECRET: ${{ secrets.VONAGE_API_SECRET }}

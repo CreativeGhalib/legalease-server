@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/authenticate.js'
 import { authorizeRoles } from '../middleware/authorizeRoles.js'
 import { validate } from '../middleware/validate.js'
 import { validateQuery } from '../middleware/validateQuery.js'
+import { validateObjectId } from '../middleware/validateObjectId.js'
 import { verifyOrigin } from '../middleware/verifyOrigin.js'
 import { adminMutationRateLimit } from '../middleware/rateLimits.js'
 import {
@@ -32,6 +33,7 @@ adminRouter.patch(
   '/users/:id/role',
   adminMutationRateLimit,
   verifyOrigin,
+  validateObjectId('id'),
   validate(roleSchema),
   adminController.updateRole,
 )
@@ -39,6 +41,7 @@ adminRouter.patch(
   '/users/:id/status',
   adminMutationRateLimit,
   verifyOrigin,
+  validateObjectId('id'),
   validate(statusSchema),
   adminController.updateStatus,
 )
@@ -50,6 +53,7 @@ adminRouter.patch(
   '/lawyers/:id/publication',
   adminMutationRateLimit,
   verifyOrigin,
+  validateObjectId('id'),
   validate(publicationActionSchema),
   adminController.moderateLawyer,
 )
@@ -57,6 +61,7 @@ adminRouter.patch(
   '/lawyers/:id/tier',
   adminMutationRateLimit,
   verifyOrigin,
+  validateObjectId('id'),
   validate(tierSchema),
   adminController.updateLawyerTier,
 )
@@ -64,6 +69,7 @@ adminRouter.delete(
   '/lawyers/:id',
   adminMutationRateLimit,
   verifyOrigin,
+  validateObjectId('id'),
   adminController.deleteLawyer,
 )
 
@@ -73,6 +79,7 @@ adminRouter.patch(
   '/disputes/:id/resolve',
   adminMutationRateLimit,
   verifyOrigin,
+  validateObjectId('id'),
   validate(resolveDisputeSchema),
   adminController.resolveDispute,
 )
@@ -80,6 +87,7 @@ adminRouter.post(
   '/transactions/:id/refund',
   adminMutationRateLimit,
   verifyOrigin,
+  validateObjectId('id'),
   validate(releaseOverrideSchema),
   adminController.refundTransactionOverride,
 )
@@ -87,6 +95,7 @@ adminRouter.post(
   '/transactions/:id/release',
   adminMutationRateLimit,
   verifyOrigin,
+  validateObjectId('id'),
   validate(releaseOverrideSchema),
   adminController.releaseEscrowOverride,
 )

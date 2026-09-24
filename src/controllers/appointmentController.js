@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import { Appointment } from '../models/Appointment.js'
 import { LawyerProfile } from '../models/LawyerProfile.js'
+import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { User } from '../models/User.js'
 import { createNotification } from '../services/notificationService.js'
 import { dhakaTodayKey, endLabelFor, generateDaySlots } from '../utils/slots.js'
@@ -215,6 +216,22 @@ export async function cancelAppointment(request, response, next) {
         (appointment.lawyerProfileId && String(appointment.lawyerProfileId.userId) === String(request.auth.user.id)))
     if (!isParty) throw fail('Appointment was not found.', 404, 'APPOINTMENT_NOT_FOUND')
     if (appointment.status !== 'scheduled') throw fail('This appointment is already closed.', 409, 'APPOINTMENT_ALREADY_CLOSED')
+    if (appointment.paymentStatus === 'paid') {
+      throw fail('A paid appointment must be resolved through the refund process before cancellation.', 409, 'PAID_APPOINTMENT_REFUND_REQUIRED')
+    }
+
+    const activeCheckout = appointment.checkoutCreating || await PaymentTransaction.exists({
+      appointmentId: appointment._id,
+      type: 'appointment_fee',
+      status: 'pending',
+      $or: [
+        { stripeCheckoutSessionId: { $exists: true, $ne: null } },
+        { gatewayTranId: { $exists: true, $ne: null } },
+      ],
+    })
+    if (activeCheckout) {
+      throw fail('This appointment has an active payment checkout and cannot be cancelled yet.', 409, 'APPOINTMENT_CHECKOUT_ACTIVE')
+    }
 
     appointment.status = 'cancelled'
     await appointment.save()
@@ -233,6 +250,9 @@ export async function completeAppointment(request, response, next) {
       throw fail('Appointment was not found.', 404, 'APPOINTMENT_NOT_FOUND')
     }
     if (appointment.status !== 'scheduled') throw fail('This appointment is already closed.', 409, 'APPOINTMENT_ALREADY_CLOSED')
+    if (appointment.amountMinor > 0 && appointment.paymentStatus !== 'paid') {
+      throw fail('Payment must be confirmed before completing this appointment.', 409, 'APPOINTMENT_PAYMENT_REQUIRED')
+    }
 
     appointment.status = 'completed'
     await appointment.save()

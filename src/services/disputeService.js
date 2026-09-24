@@ -5,6 +5,7 @@ import { PaymentTransaction } from '../models/PaymentTransaction.js'
 import { User } from '../models/User.js'
 import { createNotification } from './notificationService.js'
 import { logAudit, AUDIT_ACTIONS } from './auditService.js'
+import { refundHiringTransaction } from './refundService.js'
 
 function fail(message, statusCode, code) {
   return Object.assign(new Error(message), { statusCode, code })
@@ -105,30 +106,14 @@ export async function resolveDispute(admin, disputeId, { outcome, note }) {
 
   const now = new Date()
   if (outcome === 'refund') {
+    const result = await refundHiringTransaction(admin, transaction, note)
+    const currentDispute = await Dispute.findById(dispute._id)
+    return { dispute: currentDispute, refundStatus: result.pending ? 'pending' : 'succeeded' }
+  }
+
+  {
     const updated = await PaymentTransaction.findOneAndUpdate(
-      { _id: transaction._id, status: 'paid' },
-      {
-        $set: {
-          status: 'refunded',
-          escrowStatus: 'refunded',
-          refundAmountMinor: transaction.amountMinor,
-        },
-      },
-      { new: true },
-    )
-    if (!updated) throw fail('This dispute is already resolved.', 409, 'DISPUTE_ALREADY_RESOLVED')
-      await notifyParties(engagement, `Dispute resolved — refund issued`, `Admin refunded $${(transaction.amountMinor / 100).toFixed(2)} for the ${engagement.specializationSnapshot} engagement. Note: ${note}`)
-    await logAudit({
-      actorId: admin.id,
-      actorRole: 'admin',
-      action: AUDIT_ACTIONS.DISPUTE_RESOLVE_REFUND,
-      targetType: 'Dispute',
-      targetId: String(dispute._id),
-      meta: { hiringRequestId: String(engagement._id), note },
-    })
-  } else {
-    const updated = await PaymentTransaction.findOneAndUpdate(
-      { _id: transaction._id, escrowStatus: { $in: ['held', 'disputed'] } },
+      { _id: transaction._id, escrowStatus: { $in: ['held', 'disputed'] }, refundStatus: { $ne: 'pending' } },
       {
         $set: {
           escrowStatus: 'released',
@@ -164,7 +149,7 @@ export async function resolveDispute(admin, disputeId, { outcome, note }) {
   if (!closed) throw fail('This dispute is already resolved.', 409, 'DISPUTE_ALREADY_RESOLVED')
 
   await HiringRequest.updateOne({ _id: engagement._id }, { $set: { disputeStatus: 'resolved' } })
-  return closed
+  return { dispute: closed, refundStatus: null }
 }
 
 export async function adminRefundTransaction(admin, txnId, note) {
@@ -173,39 +158,14 @@ export async function adminRefundTransaction(admin, txnId, note) {
   const transaction = await PaymentTransaction.findOne({ _id: txnId, type: 'hiring_fee', status: 'paid', escrowStatus: { $in: ['held', 'disputed'] } })
   if (!transaction) throw fail('No refundable held escrow found for this transaction.', 409, 'ESCROW_NOT_REFUNDABLE')
 
-  const updated = await PaymentTransaction.findOneAndUpdate(
-    { _id: transaction._id, status: 'paid', escrowStatus: { $in: ['held', 'disputed'] } },
-    {
-      $set: {
-        status: 'refunded',
-        escrowStatus: 'refunded',
-        refundAmountMinor: transaction.amountMinor,
-      },
-    },
-    { new: true },
-  )
-  if (!updated) throw fail('This dispute is already resolved.', 409, 'DISPUTE_ALREADY_RESOLVED')
-
-  if (transaction.hiringRequestId) {
-    await Dispute.updateMany(
-      { hiringRequestId: transaction.hiringRequestId, status: 'open' },
-      { $set: { status: 'resolved_refund', resolvedById: admin.id, resolutionNote: note } },
-    )
-    await HiringRequest.updateOne({ _id: transaction.hiringRequestId }, { $set: { disputeStatus: 'resolved' } })
-
-    const engagement = await HiringRequest.findById(transaction.hiringRequestId)
-    if (engagement) {
-      await notifyParties(engagement, 'Payment refunded by admin', `An administrator refunded the $${(transaction.amountMinor / 100).toFixed(2)} payment for the ${engagement.specializationSnapshot} engagement. Note: ${note}`)
-    }
-  }
-  return updated
+  return refundHiringTransaction(admin, transaction, note)
 }
 
 export async function forceReleaseEscrow(admin, txnId, note) {
   if (!isValidId(txnId)) throw fail('Transaction was not found.', 404, 'PAYMENT_NOT_FOUND')
 
   const updated = await PaymentTransaction.findOneAndUpdate(
-    { _id: txnId, status: 'paid', escrowStatus: { $in: ['held', 'disputed'] }, type: 'hiring_fee' },
+    { _id: txnId, status: 'paid', escrowStatus: { $in: ['held', 'disputed'] }, refundStatus: { $ne: 'pending' }, type: 'hiring_fee' },
     { $set: { escrowStatus: 'released', releaseReason: 'admin', releasedAt: new Date() } },
     { new: true },
   )

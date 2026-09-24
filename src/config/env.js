@@ -22,6 +22,7 @@ const envSchema = z.object({
   MONGODB_URI: mongoConnectionString.optional(),
   MONGODB_DB_NAME: z.string().min(1).default('legalease'),
   CLIENT_ORIGINS: z.string().optional(),
+  SERVER_URL: optionalEnvironmentValue(z.string().url()),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must contain at least 32 characters.'),
   COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default('legalease_session'),
   GOOGLE_CLIENT_ID: optionalGoogleClientId,
@@ -42,6 +43,7 @@ const envSchema = z.object({
   EMAIL_FROM: optionalEnvironmentValue(z.string().email()),
   SSCOMMERZ_STORE_ID: optionalEnvironmentValue(z.string().min(1)),
   SSCOMMERZ_STORE_PASSWORD: optionalEnvironmentValue(z.string().min(1)),
+  SSCOMMERZ_USD_TO_BDT_RATE: optionalEnvironmentValue(z.coerce.number().positive()),
   SENTRY_DSN: optionalEnvironmentValue(z.string().min(1)),
   VONAGE_API_KEY: optionalEnvironmentValue(z.string().min(1)),
   VONAGE_API_SECRET: optionalEnvironmentValue(z.string().min(1)),
@@ -83,6 +85,14 @@ if (values.STRIPE_SECRET_KEY && !values.LAWYER_PUBLISHING_FEE_CENTS) {
 
 if (values.STRIPE_SECRET_KEY && !values.STRIPE_WEBHOOK_SECRET) {
   throw new Error('STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is configured.')
+}
+
+if ((values.SSCOMMERZ_STORE_ID || values.SSCOMMERZ_STORE_PASSWORD) && !values.SSCOMMERZ_USD_TO_BDT_RATE) {
+  throw new Error('SSCOMMERZ_USD_TO_BDT_RATE is required when SSLCommerz is configured.')
+}
+
+if (values.NODE_ENV === 'production' && values.SSCOMMERZ_STORE_ID && !values.SERVER_URL) {
+  throw new Error('SERVER_URL is required for SSLCommerz callbacks in production.')
 }
 
 export const env = { ...values, clientOrigins }
